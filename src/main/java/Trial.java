@@ -31,6 +31,40 @@ public class Trial {
 
     private static void cutPizza(String in, String out) {
         Pizza pizza = readFile(in);
+
+        ArrayList<int[]> shapes = new ArrayList<int[]>();
+        for (int i = pizza.minIngredient * 2; i <= pizza.maxCells; i++) {
+            for (int j = 1; j <= i; j++) {
+                if (i % j == 0) {
+                    shapes.add(new int[]{j, i / j});
+                }
+            }
+
+        }
+
+
+        SlicesPool bestPool = null;
+        int bestScore = -1;
+        int size = shapes.size();
+        for (int i = 0; i < size; i++) {
+            int[] shape = shapes.get(i);
+            SlicesPool slicesPool = slicePizza(pizza, shape);
+            int newScore = slicesPool.computeScore();
+            if (newScore > bestScore) {
+                bestPool = slicesPool;
+                bestScore = newScore;
+                System.out.println(out + " new best score : " + newScore + "/" + (pizza.rows * pizza.columns) + " with shape : " + Arrays.toString(shape));
+            }
+        }
+
+        if (bestPool != null) {
+            bestPool.writeFile(out);
+            System.out.println(out + " : " + bestPool.computeScore());
+        }
+
+    }
+
+    private static SlicesPool slicePizza(Pizza pizza, int[] shape) {
         SlicesPool slicesPool = new SlicesPool();
         slicesPool.initCells(pizza.rows, pizza.columns);
 
@@ -46,8 +80,8 @@ public class Trial {
                 }
 
                 // get a slice shape.
-                int sliceCol = 2;
-                int sliceRow = pizza.maxCells / sliceCol;
+                int sliceRow = shape[0];
+                int sliceCol = shape[1];
                 int countTomato = 0;
                 int countMushroom = 0;
                 boolean cellsAlreadyUsed = false;
@@ -80,10 +114,7 @@ public class Trial {
                 }
             }
         }
-
-        slicesPool.writeFile(out);
-
-        System.out.println(out + " : " + slicesPool.computeScore());
+        return slicesPool;
     }
 
     private static Pizza readFile(String resPath) {
