@@ -1,8 +1,7 @@
 import java.io.*;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.*;
 
 /**
  * Trial round.
@@ -93,6 +92,15 @@ public class Trial {
             }
 
         }
+
+        Collections.sort(shapes, new Comparator<int[]>(){
+
+            public int compare(int[] o1, int[] o2) {
+                int a1 = o1[0] * o1[1];
+                int a2 = o2[0] * o2[1];
+                return a2 - a1;
+            }
+        });
 
 
         SlicesPool bestPool = null;
