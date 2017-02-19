@@ -19,17 +19,71 @@ public class Trial {
     private static final String BIG_IN = "files/trial_2017/big.in";
     private static final String BIG_OUT = "files/trial_2017/big.out";
 
+
     public static void main(String[] args) {
         System.out.println("Welcome to the trial round!");
 
-        Pizza pizza = readFile(SMALL_IN);
+        cutPizza(EXAMPLE_IN, EXAMPLE_OUT);
+        cutPizza(SMALL_IN, SMALL_OUT);
+        cutPizza(MEDIUM_IN, MEDIUM_OUT);
+        cutPizza(BIG_IN, BIG_OUT);
+    }
 
+    private static void cutPizza(String in, String out) {
+        Pizza pizza = readFile(in);
         SlicesPool slicesPool = new SlicesPool();
-        slicesPool.slices.add(new int[]{0, 0, 2, 1});
-        slicesPool.slices.add(new int[]{0, 2, 2, 2});
-        slicesPool.slices.add(new int[]{0, 3, 2, 4});
-        slicesPool.writeFile(EXAMPLE_OUT);
+        slicesPool.initCells(pizza.rows, pizza.columns);
 
+        int rows = pizza.rows;
+        int columns = pizza.columns;
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < columns; j++) {
+
+
+                if (slicesPool.cells[i][j] == (byte) 1) {
+                    // cell already used
+                    continue;
+                }
+
+                // get a slice shape.
+                int sliceCol = 2;
+                int sliceRow = pizza.maxCells / sliceCol;
+                int countTomato = 0;
+                int countMushroom = 0;
+                boolean cellsAlreadyUsed = false;
+
+                // valid shape
+                int rowBoundary = Math.min(rows, sliceRow + i);
+                int colBoundary = Math.min(columns, sliceCol + j);
+                innerLoop:
+                for (int k = i; k < rowBoundary; k++) {
+                    for (int l = j; l < colBoundary; l++) {
+                        if (slicesPool.cells[k][l] == (byte) 1) {
+                            cellsAlreadyUsed = true;
+                            break innerLoop;
+                        }
+                        if (pizza.cells[k][l] == (byte) 1) {
+                            countTomato++;
+                        } else {
+                            countMushroom++;
+                        }
+                    }
+                }
+
+                if (!cellsAlreadyUsed && countTomato >= pizza.minIngredient && countMushroom >= pizza.minIngredient) {
+                    for (int k = i; k < rowBoundary; k++) {
+                        for (int l = j; l < colBoundary; l++) {
+                            slicesPool.cells[k][l] = (byte) 1;
+                        }
+                    }
+                    slicesPool.slices.add(new int[]{i, j, rowBoundary - 1, colBoundary - 1});
+                }
+            }
+        }
+
+        slicesPool.writeFile(out);
+
+        System.out.println(out + " : " + slicesPool.computeScore());
     }
 
     private static Pizza readFile(String resPath) {
@@ -75,9 +129,31 @@ public class Trial {
     static class SlicesPool {
 
         ArrayList<int[]> slices;
+        byte[][] cells; // 1 used | 2 unused
+        private int rows;
+        private int columns;
 
         public SlicesPool() {
             slices = new ArrayList<int[]>();
+        }
+
+        public void initCells(int r, int c) {
+            rows = r;
+            columns = c;
+            cells = new byte[r][c];
+            for (int i = 0; i < r; i++) {
+                for (int j = 0; j < c; j++) {
+                    cells[i][j] = (byte) 0;
+                }
+            }
+        }
+
+        public int computeScore() {
+            int score = 0;
+            for (int[] slice : slices) {
+                score += (1 + slice[2] - slice[0]) * (1 + slice[3] - slice[1]);
+            }
+            return score;
         }
 
         private void writeFile(String resPath) {
