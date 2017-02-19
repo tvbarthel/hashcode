@@ -1,8 +1,5 @@
-import java.io.BufferedReader;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.IOException;
-import java.net.URL;
+import java.io.*;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 /**
@@ -10,25 +7,37 @@ import java.util.Arrays;
  */
 public class Trial {
 
-    private static final String SMALL = "./trial/small.in";
-    private static final String MEDIUM = "./trial/medium.in";
-    private static final String BIG = "./trial/big.in";
+    private static final String EXAMPLE_IN = "files/trial_2017/example.in";
+    private static final String EXAMPLE_OUT = "files/trial_2017/example.out";
+
+    private static final String SMALL_IN = "files/trial_2017/small.in";
+    private static final String SMALL_OUT = "files/trial_2017/small.out";
+
+    private static final String MEDIUM_IN = "files/trial_2017/medium.in";
+    private static final String MEDIUM_OUT = "files/trial_2017/medium.out";
+
+    private static final String BIG_IN = "files/trial_2017/big.in";
+    private static final String BIG_OUT = "files/trial_2017/big.out";
 
     public static void main(String[] args) {
         System.out.println("Welcome to the trial round!");
 
-        Pizza pizza = readFile(SMALL);
+        Pizza pizza = readFile(SMALL_IN);
+
+        SlicesPool slicesPool = new SlicesPool();
+        slicesPool.slices.add(new int[]{0, 0, 2, 1});
+        slicesPool.slices.add(new int[]{0, 2, 2, 2});
+        slicesPool.slices.add(new int[]{0, 3, 2, 4});
+        slicesPool.writeFile(EXAMPLE_OUT);
 
     }
 
     private static Pizza readFile(String resPath) {
 
-        URL resource = ClassLoader.getSystemClassLoader().getResource(resPath);
-
         BufferedReader br;
         Pizza pizza = new Pizza();
         try {
-            br = new BufferedReader(new FileReader(resource.getFile()));
+            br = new BufferedReader(new FileReader(resPath));
             String line;
             line = br.readLine();
 
@@ -61,6 +70,33 @@ public class Trial {
         }
 
         return pizza;
+    }
+
+    static class SlicesPool {
+
+        ArrayList<int[]> slices;
+
+        public SlicesPool() {
+            slices = new ArrayList<int[]>();
+        }
+
+        private void writeFile(String resPath) {
+
+            try {
+                PrintWriter writer = new PrintWriter(resPath);
+                int numberOfSlices = slices.size();
+
+                writer.println(numberOfSlices);
+                for (int i = 0; i < numberOfSlices; i++) {
+                    int[] slice = slices.get(i);
+                    writer.println(slice[0] + " " + slice[1] + " " + slice[2] + " " + slice[3]);
+                }
+
+                writer.close();
+            } catch (IOException e) {
+                System.out.println("error writing file " + e.getMessage());
+            }
+        }
     }
 
     static class Pizza {
