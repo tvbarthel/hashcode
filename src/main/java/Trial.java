@@ -29,44 +29,7 @@ public class Trial {
         cutPizza(BIG_IN, BIG_OUT);
     }
 
-    private static void cutPizza(String in, String out) {
-        Pizza pizza = readFile(in);
-
-        ArrayList<int[]> shapes = new ArrayList<int[]>();
-        for (int i = pizza.minIngredient * 2; i <= pizza.maxCells; i++) {
-            for (int j = 1; j <= i; j++) {
-                if (i % j == 0) {
-                    shapes.add(new int[]{j, i / j});
-                }
-            }
-
-        }
-
-
-        SlicesPool bestPool = null;
-        int bestScore = -1;
-        int size = shapes.size();
-        for (int i = 0; i < size; i++) {
-            int[] shape = shapes.get(i);
-            SlicesPool slicesPool = slicePizza(pizza, shape);
-            int newScore = slicesPool.computeScore();
-            if (newScore > bestScore) {
-                bestPool = slicesPool;
-                bestScore = newScore;
-                System.out.println(out + " new best score : " + newScore + "/" + (pizza.rows * pizza.columns) + " with shape : " + Arrays.toString(shape));
-            }
-        }
-
-        if (bestPool != null) {
-            bestPool.writeFile(out);
-            System.out.println(out + " : " + bestPool.computeScore());
-        }
-
-    }
-
-    private static SlicesPool slicePizza(Pizza pizza, int[] shape) {
-        SlicesPool slicesPool = new SlicesPool();
-        slicesPool.initCells(pizza.rows, pizza.columns);
+    private static void slicePizza(Pizza pizza, int[] shape, SlicesPool slicesPool) {
 
         int rows = pizza.rows;
         int columns = pizza.columns;
@@ -114,7 +77,51 @@ public class Trial {
                 }
             }
         }
-        return slicesPool;
+    }
+
+    private static void cutPizza(String in, String out) {
+        Pizza pizza = readFile(in);
+
+        ArrayList<int[]> shapes = new ArrayList<int[]>();
+        for (int i = pizza.minIngredient * 2; i <= pizza.maxCells; i++) {
+            for (int j = 1; j <= i; j++) {
+                if (i % j == 0) {
+                    shapes.add(new int[]{j, i / j});
+                }
+            }
+
+        }
+
+
+        SlicesPool bestPool = null;
+        int bestScore = -1;
+        int size = shapes.size();
+        for (int i = 0; i < size; i++) {
+            int[] shape = shapes.get(i);
+
+            SlicesPool pool = new SlicesPool();
+            pool.initCells(pizza.rows, pizza.columns);
+            slicePizza(pizza, shape, pool);
+
+            // fill gap with others shape.
+            for (int k = 0; k < size; k++) {
+                slicePizza(pizza, shapes.get(k), pool);
+            }
+
+
+            int newScore = pool.computeScore();
+            if (newScore > bestScore) {
+                bestPool = pool;
+                bestScore = newScore;
+                System.out.println(out + " new best score : " + newScore + "/" + (pizza.rows * pizza.columns) + " with shape : " + Arrays.toString(shape));
+            }
+        }
+
+        if (bestPool != null) {
+            bestPool.writeFile(out);
+            System.out.println(out + " : " + bestPool.computeScore());
+        }
+
     }
 
     private static Pizza readFile(String resPath) {
