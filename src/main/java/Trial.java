@@ -1,4 +1,6 @@
 import java.io.*;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -119,6 +121,7 @@ public class Trial {
 
         if (bestPool != null) {
             bestPool.writeFile(out);
+            bestPool.drawSlices(out + ".draw");
             System.out.println(out + " : " + bestPool.computeScore());
         }
 
@@ -204,6 +207,56 @@ public class Trial {
                 for (int i = 0; i < numberOfSlices; i++) {
                     int[] slice = slices.get(i);
                     writer.println(slice[0] + " " + slice[1] + " " + slice[2] + " " + slice[3]);
+                }
+
+                writer.close();
+            } catch (IOException e) {
+                System.out.println("error writing file " + e.getMessage());
+            }
+        }
+
+        private void drawSlices(String resPath) {
+
+            try {
+                PrintWriter writer = new PrintWriter(resPath);
+
+                int numberOfSlice = slices.size();
+                int decimal = 1;
+                while (numberOfSlice / 10 > 10) {
+                    decimal++;
+                    numberOfSlice = numberOfSlice / 10;
+                }
+
+                StringBuilder builder = new StringBuilder();
+                builder.append("[");
+                for (int i = 0; i < decimal; i++) {
+                    builder.append("#");
+                }
+                builder.append("]");
+
+                NumberFormat format = new DecimalFormat(builder.toString());
+
+                String[][] chars = new String[rows][columns];
+                for (int i = 0; i < rows; i++) {
+                    for (int j = 0; j < columns; j++) {
+                        chars[i][j] = format.format(0);
+                    }
+                }
+
+                for (int h = 0; h < slices.size(); h++) {
+                    int[] slice = slices.get(h);
+                    for (int i = slice[0]; i <= slice[2]; i++) {
+                        for (int j = slice[1]; j <= slice[3]; j++) {
+                            chars[i][j] = format.format(h + 1);
+                        }
+                    }
+                }
+
+                for (int i = 0; i < rows; i++) {
+                    for (int j = 0; j < columns; j++) {
+                        writer.print(chars[i][j]);
+                    }
+                    writer.println("");
                 }
 
                 writer.close();
