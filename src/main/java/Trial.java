@@ -93,7 +93,7 @@ public class Trial {
 
         }
 
-        Collections.sort(shapes, new Comparator<int[]>(){
+        Collections.sort(shapes, new Comparator<int[]>() {
 
             public int compare(int[] o1, int[] o2) {
                 int a1 = o1[0] * o1[1];
@@ -102,14 +102,13 @@ public class Trial {
             }
         });
 
-
         SlicesPool bestPool = null;
         int bestScore = -1;
         int size = shapes.size();
         for (int i = 0; i < size; i++) {
             int[] shape = shapes.get(i);
 
-            SlicesPool pool = new SlicesPool();
+            SlicesPool pool = new SlicesPool(pizza);
             pool.initCells(pizza.rows, pizza.columns);
             slicePizza(pizza, shape, pool);
 
@@ -118,6 +117,16 @@ public class Trial {
                 slicePizza(pizza, shapes.get(k), pool);
             }
 
+
+
+            pool.slices = splitSlices(pool);
+            pool.slices = expandSlices(pool);
+
+            pool.slices = splitSlices(pool);
+            pool.slices = expandSlices(pool);
+
+            pool.slices = splitSlices(pool);
+            pool.slices = expandSlices(pool);
 
             int newScore = pool.computeScore();
             if (newScore > bestScore) {
@@ -133,6 +142,196 @@ public class Trial {
             System.out.println(out + " : " + bestPool.computeScore());
         }
 
+    }
+
+    private static List<int[]> expandSlices(SlicesPool pool) {
+        List<int[]> slices = pool.slices;
+        ArrayList<int[]> expandedSlices = new ArrayList<int[]>();
+        for (int[] slice : slices) {
+            expandedSlices.add(expandSlice(pool, slice));
+        }
+        return expandedSlices;
+    }
+
+    private static int[] expandSlice(SlicesPool pool, int[] slice) {
+        boolean didExpand = false;
+        int rowTop = slice[0] - 1;
+        if (canExpandToRow(pool, rowTop, slice)) {
+            didExpand = true;
+            markRowAsNotAvailable(pool, rowTop, slice[1], slice[3]);
+            slice = new int[]{rowTop, slice[1], slice[2], slice[3]};
+        }
+
+        int rowBottom = slice[2] + 1;
+        if (canExpandToRow(pool, rowBottom, slice)) {
+            didExpand = true;
+            markRowAsNotAvailable(pool, rowBottom, slice[1], slice[3]);
+            slice = new int[]{slice[0], slice[1], rowBottom, slice[3]};
+        }
+
+        int colLeft = slice[1] - 1;
+        if (canExpandToCol(pool, colLeft, slice)) {
+            didExpand = true;
+            markColAsNotAvailable(pool, colLeft, slice[0], slice[2]);
+            slice = new int[]{slice[0], colLeft, slice[2], slice[3]};
+        }
+
+        int colRight = slice[3] + 1;
+        if (canExpandToCol(pool, colRight, slice)) {
+            didExpand = true;
+            markColAsNotAvailable(pool, colRight, slice[0], slice[2]);
+            slice = new int[]{slice[0], slice[1], slice[2], colRight};
+        }
+
+        if (!didExpand) {
+            return slice;
+        }
+
+        return expandSlice(pool, slice);
+    }
+
+
+    private static void markColAsNotAvailable(SlicesPool pool, int col, int startRow, int stopRow) {
+        for (int row = startRow; row <= stopRow; row++) {
+            pool.cells[row][col] = (byte) 1;
+        }
+    }
+
+    private static boolean canExpandToCol(SlicesPool pool, int col, int[] slice) {
+        if (col >= pool.columns || col < 0) {
+            return false;
+        }
+
+        int startRow = slice[0];
+        int stopRow = slice[2];
+        int sliceHeight = 1 + stopRow - startRow;
+        int expandedSize = getSliceSize(slice) + sliceHeight;
+        if (pool.pizza.maxCells < expandedSize) {
+            return false;
+        }
+
+        for (int row = startRow; row <= stopRow; row++) {
+            if (pool.cells[row][col] == (byte) 1) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+
+    private static void markRowAsNotAvailable(SlicesPool pool, int row, int startCol, int stopCol) {
+        for (int col = startCol; col <= stopCol; col++) {
+            pool.cells[row][col] = (byte) 1;
+        }
+    }
+
+    private static boolean canExpandToRow(SlicesPool pool, int row, int[] slice) {
+        if (row >= pool.rows || row < 0) {
+            return false;
+        }
+
+        int startCol = slice[1];
+        int stopCol = slice[3];
+        int sliceWidth = 1 + stopCol - startCol;
+        int expandedSize = getSliceSize(slice) + sliceWidth;
+        if (pool.pizza.maxCells < expandedSize) {
+            return false;
+        }
+
+        for (int col = startCol; col <= stopCol; col++) {
+            if (pool.cells[row][col] == (byte) 1) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static List<int[]> splitSlices(SlicesPool pool) {
+        List<int[]> oldSlices = pool.slices;
+        List<int[]> newSlices = new ArrayList<int[]>();
+        Pizza pizza = pool.pizza;
+
+        for (int[] slice : oldSlices) {
+            List<int[]> splitSlices = splitSlice(pizza, slice);
+            newSlices.addAll(splitSlices);
+        }
+
+        return newSlices;
+    }
+
+    private static List<int[]> splitSlice(Pizza pizza, int[] slice) {
+        int sliceSize = getSliceSize(slice);
+        boolean canBeSplit = sliceSize >= pizza.minIngredient * 4;
+        if (!canBeSplit) {
+            ArrayList<int[]> splitSlices = new ArrayList<int[]>(1);
+            splitSlices.add(slice);
+            return splitSlices;
+        }
+
+        int sliceHeight = 1 + slice[2] - slice[0];
+        int sliceWidth = 1 + slice[3] - slice[1];
+        if (sliceWidth >= sliceHeight) {
+            return splitSliceVertically(pizza, slice);
+        } else {
+            return splitSlicesHorizontally(pizza, slice);
+        }
+    }
+
+    private static List<int[]> splitSlicesHorizontally(Pizza pizza, int[] slice) {
+        ArrayList<int[]> splitSlices = new ArrayList<int[]>();
+
+        for (int row = slice[0]; row < slice[2]; row++) {
+            int[] splitSlice1 = new int[]{slice[0], slice[1], row, slice[3]};
+            int[] splitSlice2 = new int[]{row + 1, slice[1], slice[2], slice[3]};
+            if (areValidSlices(pizza, splitSlice1, splitSlice2)) {
+                splitSlices.addAll(splitSlice(pizza, splitSlice1));
+                splitSlices.addAll(splitSlice(pizza, splitSlice2));
+                return splitSlices;
+            }
+        }
+
+        splitSlices.add(slice);
+        return splitSlices;
+    }
+
+    private static ArrayList<int[]> splitSliceVertically(Pizza pizza, int[] slice) {
+        ArrayList<int[]> splitSlices = new ArrayList<int[]>();
+
+        for (int col = slice[1]; col < slice[3]; col++) {
+            int[] splitSlice1 = new int[]{slice[0], slice[1], slice[2], col};
+            int[] splitSlice2 = new int[]{slice[0], col + 1, slice[2], slice[3]};
+            if (areValidSlices(pizza, splitSlice1, splitSlice2)) {
+                splitSlices.addAll(splitSlice(pizza, splitSlice1));
+                splitSlices.addAll(splitSlice(pizza, splitSlice2));
+                return splitSlices;
+            }
+        }
+
+        splitSlices.add(slice);
+        return splitSlices;
+    }
+
+    private static boolean areValidSlices(Pizza pizza, int[] splitSlice1, int[] splitSlice2) {
+        return isSliceValid(pizza, splitSlice1) && isSliceValid(pizza, splitSlice2);
+    }
+
+    private static boolean isSliceValid(Pizza pizza, int[] slice) {
+        int countTomato = 0;
+        int countMushroom = 0;
+
+        for (int k = slice[0]; k <= slice[2]; k++) {
+            for (int l = slice[1]; l <= slice[3]; l++) {
+                if (pizza.cells[k][l] == (byte) 1) {
+                    countTomato++;
+                } else {
+                    countMushroom++;
+                }
+            }
+        }
+
+        return countTomato >= pizza.minIngredient && countMushroom >= pizza.minIngredient;
     }
 
     private static Pizza readFile(String resPath) {
@@ -153,19 +352,24 @@ public class Trial {
             pizza.maxCells = Integer.parseInt(params[3]);
 
             byte[][] cells = new byte[rows][columns];
+            int numberOfTomato = 0;
+            int numberOfMushroom = 0;
 
             for (int i = 0; i < rows; i++) {
                 line = br.readLine();
                 for (int j = 0; j < columns; j++) {
                     if (line.charAt(j) == 'M') {
                         cells[i][j] = (byte) 1;
+                        numberOfMushroom++;
                     } else {
                         cells[i][j] = (byte) 2;
+                        numberOfTomato++;
                     }
                 }
             }
             pizza.cells = cells;
 
+            System.out.println("Pizza with " + numberOfMushroom + " mushrooms and " + numberOfTomato + " tomatoes");
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         } catch (IOException e) {
@@ -177,12 +381,14 @@ public class Trial {
 
     static class SlicesPool {
 
-        ArrayList<int[]> slices;
+        List<int[]> slices;
         byte[][] cells; // 1 used | 2 unused
         private int rows;
         private int columns;
+        private final Pizza pizza;
 
-        public SlicesPool() {
+        public SlicesPool(Pizza pizza) {
+            this.pizza = pizza;
             slices = new ArrayList<int[]>();
         }
 
@@ -200,7 +406,7 @@ public class Trial {
         public int computeScore() {
             int score = 0;
             for (int[] slice : slices) {
-                score += (1 + slice[2] - slice[0]) * (1 + slice[3] - slice[1]);
+                score += getSliceSize(slice);
             }
             return score;
         }
@@ -272,6 +478,10 @@ public class Trial {
                 System.out.println("error writing file " + e.getMessage());
             }
         }
+    }
+
+    private static int getSliceSize(int[] slice) {
+        return (1 + slice[2] - slice[0]) * (1 + slice[3] - slice[1]);
     }
 
     static class Pizza {
