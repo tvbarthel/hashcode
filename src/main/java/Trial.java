@@ -117,14 +117,6 @@ public class Trial {
                 slicePizza(pizza, shapes.get(k), pool);
             }
 
-
-
-            pool.slices = splitSlices(pool);
-            pool.slices = expandSlices(pool);
-
-            pool.slices = splitSlices(pool);
-            pool.slices = expandSlices(pool);
-
             pool.slices = splitSlices(pool);
             pool.slices = expandSlices(pool);
 
