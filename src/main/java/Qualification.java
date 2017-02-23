@@ -25,18 +25,24 @@ public class Qualification {
     public static void main(String[] args) {
         System.out.println("Welcome to the qualification round!");
 
-        Problem problem = parseProblem(EXAMPLE_IN);
-
-        // fake solution
-        problem.caches.get(0).videos.add(problem.videos.get(2));
-        problem.caches.get(1).videos.add(problem.videos.get(3));
-        problem.caches.get(1).videos.add(problem.videos.get(1));
-        problem.caches.get(2).videos.add(problem.videos.get(0));
-        problem.caches.get(2).videos.add(problem.videos.get(1));
-
-        write_solution(EXAMPLE_OUT, problem.caches);
+        solve(EXAMPLE_IN, EXAMPLE_OUT);
+        solve(KITTEN_IN, KITTEN_OUT);
+        solve(ZOO_IN, ZOO_OUT);
+        solve(TRENDING_IN, TRENDING_OUT);
+        solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
 
         System.out.println("Bye bye to the qualification round!");
+    }
+
+    private static void solve(String in, String out) {
+        Problem problem = parseProblem(in);
+
+        cacheMostVideosAsPossible(problem.caches, problem.requests);
+
+        long score = computeScore(problem.requests);
+        System.out.println("New score: " + score);
+
+        write_solution(out, problem.caches);
     }
 
     public static void write_solution(String fileName, List<Cache> caches) {
@@ -62,6 +68,50 @@ public class Qualification {
             System.out.println("error writing file " + e.getMessage());
         }
     }
+
+
+    public static void cacheMostVideosAsPossible(ArrayList<Cache> caches, ArrayList<Request> requests) {
+        resetCache(caches);
+        for (Request request : requests) {
+            for (Cache cache : caches) {
+                if (cache.currentCapacity > 0 && cache.currentCapacity - request.video.size > 0) {
+                    if (!cache.videos.contains(request.video)) {
+                        cache.videos.add(request.video);
+                        cache.currentCapacity -= request.video.size;
+                    }
+                }
+            }
+        }
+    }
+
+    private static void resetCache(ArrayList<Cache> caches) {
+        for (Cache cache : caches) {
+            cache.videos.clear();
+            cache.currentCapacity = cache.initialCapacity;
+        }
+    }
+
+    public static long computeScore(ArrayList<Request> requests) {
+        long timeSaved = 0;
+        long requestNumber = 0;
+        for (Request request : requests) {
+            long lowestLatency = request.endPoint.latencyFromDataCenter;
+            for (Latency latency : request.endPoint.latencies) {
+                if (latency.value < lowestLatency) {
+                    for (Video video : latency.cache.videos) {
+                        if (video.id == request.video.id) {
+                            lowestLatency = latency.value; // lower latency
+                        }
+                    }
+                }
+            }
+
+            requestNumber += request.number;
+            timeSaved += request.number * (request.endPoint.latencyFromDataCenter - lowestLatency);
+        }
+        return timeSaved * 1000 / requestNumber;
+    }
+
 
     public static Problem parseProblem(String fileName) {
         try {
@@ -153,7 +203,6 @@ public class Qualification {
         }
     }
 
-
     public static class Video {
         public final int id;
         public final int size;
@@ -161,6 +210,22 @@ public class Qualification {
         public Video(int id, int size) {
             this.id = id;
             this.size = size;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            Video video = (Video) o;
+
+            return id == video.id;
+
+        }
+
+        @Override
+        public int hashCode() {
+            return id;
         }
     }
 
