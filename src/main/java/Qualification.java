@@ -24,16 +24,15 @@ public class Qualification {
     public static void main(String[] args) {
         System.out.println("Welcome to the qualification round!");
 
-        solve(EXAMPLE_IN, EXAMPLE_OUT);
-        solve(KITTEN_IN, KITTEN_OUT);
-        solve(ZOO_IN, ZOO_OUT);
-        solve(TRENDING_IN, TRENDING_OUT);
-        solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
+        // solve(KITTEN_IN, KITTEN_OUT);
+        solve(TRENDING_IN, TRENDING_IN);
+        // solve(TRENDING_IN, TRENDING_OUT);
+        // solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
 
         System.out.println("Bye bye to the qualification round!");
     }
 
-    private List<Request> getRequestsFromEndPoint(EndPoint endPoint, List<Request> requests) {
+    private static List<Request> getRequestsFromEndPoint(EndPoint endPoint, List<Request> requests) {
         ArrayList<Request> requestsFromEndPoint = new ArrayList<Request>();
         for (Request request : requests) {
             if (request.endPoint.id == endPoint.id) {
@@ -43,7 +42,7 @@ public class Qualification {
         return requestsFromEndPoint;
     }
 
-    private List<RequestFromEndPointToCache> getRequestToCache(Cache cache, List<Request> requests) {
+    private static List<RequestFromEndPointToCache> getRequestToCache(Cache cache, List<Request> requests) {
         List<RequestFromEndPointToCache> requestsFromEndPointToCache = new ArrayList<RequestFromEndPointToCache>();
 
         for (Request request : requests) {
@@ -65,31 +64,60 @@ public class Qualification {
     private static void solve(String in, String out) {
         Problem problem = parseProblem(in);
 
-        long maxScore = 0;
-        ArrayList<Cache> maxCache = new ArrayList<Cache>();
+        List<List<RequestFromEndPointToCache>> allRequests = new ArrayList<List<RequestFromEndPointToCache>>();
+        for (Cache cache : problem.caches) {
+            System.out.println("Computing request from end point to cache " + cache.id);
+            List<RequestFromEndPointToCache> requestList = getRequestToCache(cache, problem.requests);
+            allRequests.add(requestList);
+        }
 
-        System.out.println("============================");
-        System.out.println(in);
-        System.out.println("============================");
+        List<GainEsperance> gainEsperances = getGainEsperances(allRequests);
+        orderByMostGain(gainEsperances);
 
-        System.out.println("cacheMostVideosAsPossible: ");
-        cacheMostVideosAsPossible(problem.caches, problem.requests);
-        maxScore = keepHighestScore(problem, maxScore, maxCache);
+        for (GainEsperance gainEsperance : gainEsperances) {
+            if (gainEsperance.cache.currentCapacity >= gainEsperance.video.size
+                    && !gainEsperance.cache.videos.contains(gainEsperance.video)) {
+                gainEsperance.cache.currentCapacity -= gainEsperance.video.size;
+                gainEsperance.cache.videos.add(gainEsperance.video);
+            }
+        }
 
-        System.out.println("cacheVideoFromMostRequestedFirst: ");
-        cacheVideoFromMostRequestedFirst(problem.caches, problem.requests);
-        maxScore = keepHighestScore(problem, maxScore, maxCache);
+        long score = computeScore(problem.requests);
+        System.out.println("New score: " + score);
 
-        System.out.println("cacheVideoByMostRequested: ");
-        cacheVideoByMostRequested(problem.caches, problem.requests);
-        maxScore = keepHighestScore(problem, maxScore, maxCache);
+        write_solution(out, problem.caches);
+    }
 
+    private static void orderByMostGain(List<GainEsperance> gainEsperances) {
+        Collections.sort(gainEsperances, new Comparator<GainEsperance>() {
+            public int compare(GainEsperance o1, GainEsperance o2) {
+                return o2.gain - o1.gain;
+            }
+        });
+    }
 
-        write_solution(out, maxCache);
+    private static List<GainEsperance> getGainEsperances(List<List<RequestFromEndPointToCache>> allRequests) {
+        List<GainEsperance> gainEsperances = new ArrayList<GainEsperance>();
 
-        System.out.println("============================");
-        System.out.println("============================");
-        System.out.println("");
+        for (List<RequestFromEndPointToCache> requests : allRequests) {
+            for (RequestFromEndPointToCache request : requests) {
+                GainEsperance gainEsperance = getGainEsperanceForVideoAndCache(gainEsperances, request.video, request.cache);
+                gainEsperance.gain += (request.number * (request.endPoint.latencyFromDataCenter - request.latencyValue));
+            }
+        }
+
+        return gainEsperances;
+    }
+
+    private static GainEsperance getGainEsperanceForVideoAndCache(List<GainEsperance> gainEsperances, Video video, Cache cache) {
+        for (GainEsperance gainEsperance : gainEsperances) {
+            if (gainEsperance.cache.id == cache.id && gainEsperance.video.id == video.id) {
+                return gainEsperance;
+            }
+        }
+        GainEsperance gainEsperance = new GainEsperance(video, cache);
+        gainEsperances.add(gainEsperance);
+        return gainEsperance;
     }
 
     private static long keepHighestScore(Problem problem, long maxScore, ArrayList<Cache> maxCache) {
@@ -422,7 +450,7 @@ public class Qualification {
         public int videoId;
         public int endPointId;
 
-        public VideoEndPoint(){
+        public VideoEndPoint() {
 
         }
 
@@ -448,6 +476,56 @@ public class Qualification {
             int result = videoId;
             result = 31 * result + endPointId;
             return result;
+        }
+    }
+
+    public static class GainEsperance {
+        public final Video video;
+        public final Cache cache;
+        public int gain;
+
+        public GainEsperance(Video video, Cache cache) {
+            this.video = video;
+            this.cache = cache;
+            this.gain = 0;
+        }
+    }
+
+
+    private static void computeRequestFromEndPointToCache(String fileNameIn) {
+        final Problem problem = parseProblem(fileNameIn);
+        ArrayList<List<RequestFromEndPointToCache>> allRequests = new ArrayList<List<RequestFromEndPointToCache>>();
+        for (Cache cache : problem.caches) {
+            System.out.println("Computing request from end point to cache " + cache.id);
+            List<RequestFromEndPointToCache> requestList = getRequestToCache(cache, problem.requests);
+            allRequests.add(requestList);
+        }
+
+        writeRequestFromEndPointToCache(fileNameIn + "requests_from_endpoint_to_cache", allRequests);
+    }
+
+    private static void writeRequestFromEndPointToCache(String fileName, List<List<RequestFromEndPointToCache>> allRequests) {
+        try {
+            PrintWriter writer = new PrintWriter(fileName);
+
+            int totalSize = 0;
+            for (List<RequestFromEndPointToCache> requests : allRequests) {
+                totalSize += requests.size();
+            }
+            System.out.println("writeRequestFromEndPointToCache " + fileName + "(entries: " + totalSize + ")");
+
+            writer.println(totalSize);
+
+            for (List<RequestFromEndPointToCache> requests : allRequests) {
+                for (RequestFromEndPointToCache request : requests) {
+                    writer.println(request.endPoint.id + " " + request.cache.id + " " + request.video.id +
+                            " " + request.video.size + " " + request.number + " " + request.latencyValue);
+                }
+            }
+
+            writer.close();
+        } catch (IOException e) {
+            System.out.println("error writing file " + e.getMessage());
         }
     }
 }
