@@ -36,6 +36,35 @@ public class Qualification {
         System.out.println("Bye bye to the qualification round!");
     }
 
+    private List<Request> getRequestsFromEndPoint(EndPoint endPoint, List<Request> requests) {
+        ArrayList<Request> requestsFromEndPoint = new ArrayList<Request>();
+        for (Request request : requests) {
+            if (request.endPoint.id == endPoint.id) {
+                requestsFromEndPoint.add(request);
+            }
+        }
+        return requestsFromEndPoint;
+    }
+
+    private List<RequestFromEndPointToCache> getRequestToCache(Cache cache, List<Request> requests) {
+        List<RequestFromEndPointToCache> requestsFromEndPointToCache = new ArrayList<RequestFromEndPointToCache>();
+
+        for (Request request : requests) {
+            ArrayList<Latency> latencies = request.endPoint.latencies;
+            for (Latency latency : latencies) {
+                if (latency.cache.id == cache.id) {
+                    RequestFromEndPointToCache requestFromEndPointToCache =
+                            new RequestFromEndPointToCache(request.video, request.endPoint,
+                                    cache, request.number, latency.value);
+
+                    requestsFromEndPointToCache.add(requestFromEndPointToCache);
+                }
+            }
+        }
+
+        return requestsFromEndPointToCache;
+    }
+
     private static void solve(String in, String out) {
         Problem problem = parseProblem(in);
 
@@ -305,6 +334,22 @@ public class Qualification {
             this.id = id;
             this.latencyFromDataCenter = latencyFromDataCenter;
             this.latencies = new ArrayList<Latency>();
+        }
+    }
+
+    public static class RequestFromEndPointToCache {
+        public final Video video;
+        public final EndPoint endPoint;
+        public final Cache cache;
+        public final int number;
+        public final int latencyValue;
+
+        public RequestFromEndPointToCache(Video video, EndPoint endPoint, Cache cache, int number, int latencyValue) {
+            this.video = video;
+            this.endPoint = endPoint;
+            this.cache = cache;
+            this.number = number;
+            this.latencyValue = latencyValue;
         }
     }
 
