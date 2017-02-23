@@ -1,8 +1,5 @@
 import java.io.*;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
 /**
  * Qualification Round 2017
@@ -71,15 +68,28 @@ public class Qualification {
         long maxScore = 0;
         ArrayList<Cache> maxCache = new ArrayList<Cache>();
 
+        System.out.println("============================");
+        System.out.println(in);
+        System.out.println("============================");
 
+        System.out.println("cacheMostVideosAsPossible: ");
         cacheMostVideosAsPossible(problem.caches, problem.requests);
         maxScore = keepHighestScore(problem, maxScore, maxCache);
 
+        System.out.println("cacheVideoFromMostRequestedFirst: ");
         cacheVideoFromMostRequestedFirst(problem.caches, problem.requests);
+        maxScore = keepHighestScore(problem, maxScore, maxCache);
+
+        System.out.println("cacheVideoByMostRequested: ");
+        cacheVideoByMostRequested(problem.caches, problem.requests);
         maxScore = keepHighestScore(problem, maxScore, maxCache);
 
 
         write_solution(out, maxCache);
+
+        System.out.println("============================");
+        System.out.println("============================");
+        System.out.println("");
     }
 
     private static long keepHighestScore(Problem problem, long maxScore, ArrayList<Cache> maxCache) {
@@ -115,6 +125,49 @@ public class Qualification {
             writer.close();
         } catch (IOException e) {
             System.out.println("error writing file " + e.getMessage());
+        }
+    }
+
+    public static void cacheVideoByMostRequested(ArrayList<Cache> caches, ArrayList<Request> requests) {
+
+        VideoEndPoint videoEndPoint = null;
+        final HashMap<VideoEndPoint, Integer> videoEndPointIntegerHashMap = new HashMap<VideoEndPoint, Integer>();
+        for (Request request : requests) {
+            videoEndPoint = new VideoEndPoint(request.video.id, request.endPoint.id);
+            Integer integer = videoEndPointIntegerHashMap.get(videoEndPoint);
+            if (integer == null) {
+                videoEndPointIntegerHashMap.put(videoEndPoint, request.number);
+            } else {
+                videoEndPointIntegerHashMap.put(videoEndPoint, integer + request.number);
+            }
+        }
+
+        Collections.sort(requests, new Comparator<Request>() {
+
+            VideoEndPoint v1 = new VideoEndPoint();
+            VideoEndPoint v2 = new VideoEndPoint();
+
+            public int compare(Request o1, Request o2) {
+                v1.endPointId = o1.endPoint.id;
+                v1.videoId = o1.video.id;
+                v2.endPointId = o2.endPoint.id;
+                v2.videoId = o2.video.id;
+
+                return videoEndPointIntegerHashMap.get(v2) - videoEndPointIntegerHashMap.get(v1);
+            }
+
+        });
+
+        resetCache(caches);
+        for (Request request : requests) {
+            for (Cache cache : caches) {
+                if (cache.currentCapacity > 0 && cache.currentCapacity - request.video.size > 0) {
+                    if (!cache.videos.contains(request.video)) {
+                        cache.videos.add(request.video);
+                        cache.currentCapacity -= request.video.size;
+                    }
+                }
+            }
         }
     }
 
@@ -362,6 +415,39 @@ public class Qualification {
             this.video = video;
             this.endPoint = endPoint;
             this.number = number;
+        }
+    }
+
+    public static class VideoEndPoint {
+        public int videoId;
+        public int endPointId;
+
+        public VideoEndPoint(){
+
+        }
+
+        public VideoEndPoint(int videoId, int endPointId) {
+            this.videoId = videoId;
+            this.endPointId = endPointId;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            VideoEndPoint that = (VideoEndPoint) o;
+
+            if (videoId != that.videoId) return false;
+            return endPointId == that.endPointId;
+
+        }
+
+        @Override
+        public int hashCode() {
+            int result = videoId;
+            result = 31 * result + endPointId;
+            return result;
         }
     }
 }
