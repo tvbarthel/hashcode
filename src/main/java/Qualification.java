@@ -1,5 +1,7 @@
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -37,12 +39,30 @@ public class Qualification {
     private static void solve(String in, String out) {
         Problem problem = parseProblem(in);
 
-        cacheMostVideosAsPossible(problem.caches, problem.requests);
+        long maxScore = 0;
+        ArrayList<Cache> maxCache = new ArrayList<Cache>();
 
+
+        cacheMostVideosAsPossible(problem.caches, problem.requests);
+        maxScore = keepHighestScore(problem, maxScore, maxCache);
+
+        cacheVideoFromMostRequestedFirst(problem.caches, problem.requests);
+        maxScore = keepHighestScore(problem, maxScore, maxCache);
+
+
+        write_solution(out, maxCache);
+    }
+
+    private static long keepHighestScore(Problem problem, long maxScore, ArrayList<Cache> maxCache) {
         long score = computeScore(problem.requests);
         System.out.println("New score: " + score);
-
-        write_solution(out, problem.caches);
+        if (score > maxScore) {
+            maxCache.clear();
+            maxCache.addAll(problem.caches);
+            System.out.println("NEW HIGHEST SCORE: " + score);
+            return score;
+        }
+        return maxScore;
     }
 
     public static void write_solution(String fileName, List<Cache> caches) {
@@ -66,6 +86,29 @@ public class Qualification {
             writer.close();
         } catch (IOException e) {
             System.out.println("error writing file " + e.getMessage());
+        }
+    }
+
+    public static void cacheVideoFromMostRequestedFirst(ArrayList<Cache> caches, ArrayList<Request> requests) {
+
+        Collections.sort(requests, new Comparator<Request>() {
+
+            public int compare(Request o1, Request o2) {
+                return o2.number - o1.number;
+            }
+
+        });
+
+        resetCache(caches);
+        for (Request request : requests) {
+            for (Cache cache : caches) {
+                if (cache.currentCapacity > 0 && cache.currentCapacity - request.video.size > 0) {
+                    if (!cache.videos.contains(request.video)) {
+                        cache.videos.add(request.video);
+                        cache.currentCapacity -= request.video.size;
+                    }
+                }
+            }
         }
     }
 
