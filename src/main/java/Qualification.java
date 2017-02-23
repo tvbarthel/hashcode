@@ -27,7 +27,40 @@ public class Qualification {
 
         Problem problem = parseProblem(EXAMPLE_IN);
 
+        // fake solution
+        problem.caches.get(0).videos.add(problem.videos.get(2));
+        problem.caches.get(1).videos.add(problem.videos.get(3));
+        problem.caches.get(1).videos.add(problem.videos.get(1));
+        problem.caches.get(2).videos.add(problem.videos.get(0));
+        problem.caches.get(2).videos.add(problem.videos.get(1));
+
+        write_solution(EXAMPLE_OUT, problem.caches);
+
         System.out.println("Bye bye to the qualification round!");
+    }
+
+    public static void write_solution(String fileName, List<Cache> caches) {
+        try {
+            PrintWriter writer = new PrintWriter(fileName);
+            int numberOfCaches = caches.size();
+
+            writer.println(numberOfCaches);
+            for (int i = 0; i < numberOfCaches; i++) {
+                Cache cache = caches.get(i);
+                writer.print(cache.id);
+                int numberOfVideos = cache.videos.size();
+                for (int j = 0; j < numberOfVideos; j++) {
+                    Video video = cache.videos.get(j);
+                    writer.print(' ');
+                    writer.print(video.id);
+                }
+                writer.println();
+            }
+
+            writer.close();
+        } catch (IOException e) {
+            System.out.println("error writing file " + e.getMessage());
+        }
     }
 
     public static Problem parseProblem(String fileName) {
