@@ -27,7 +27,7 @@ public class Qualification {
         System.out.println("Welcome to the qualification round!");
 
         // solve(KITTEN_IN, KITTEN_OUT);
-        solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
+        solve(ZOO_IN, ZOO_OUT);
         // solve(TRENDING_IN, TRENDING_OUT);
         // solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
 
@@ -83,34 +83,46 @@ public class Qualification {
             allRequests.addAll(requestList);
         }
 
-        boolean appliedEsperance;
+        List<GainEsperance> gainEsperances = createGainEsperances(allRequests);
         int appliedEsperances = 0;
         GainEsperance appliedGainEsperances;
         do {
-            List<GainEsperance> gainEsperances = getGainEsperances(allRequests, numberOfRequestInTotal);
+            int numberOfRequestLeft = removeRequestAlreadySatisfiedAndGainWithNoRequest(gainEsperances);
+            recomputeGainEsperancesGain(gainEsperances, numberOfRequestInTotal);
             orderByMostGain(gainEsperances);
             appliedGainEsperances = applyingFirstEsperance(gainEsperances);
 
-            if (appliedGainEsperances != null) {
-                for (RequestFromEndPointToCache associatedRequest : appliedGainEsperances.associatedRequests) {
-                    allRequests.remove(associatedRequest);
-                }
-            }
-
             appliedEsperances++;
-            if (appliedEsperances % 100 == 0) {
-                System.out.println("Applied esperances " + appliedEsperances);
+            if (appliedEsperances % 50 == 0) {
+                System.out.println("Applied esperances " + appliedEsperances +
+                        " still " + gainEsperances.size() + " gain esperances with " +
+                        numberOfRequestLeft + " requests");
+                printCacheCapacities(problem);
             }
         } while (appliedGainEsperances != null);
 
-        for (Cache cache : problem.caches) {
-            System.out.println("Cache with capacity " + cache.currentCapacity);
-        }
+        printCacheCapacities(problem);
 
         long score = computeScore(problem.requests);
         System.out.println("New score: " + score);
 
         write_solution(out, problem.caches);
+    }
+
+    private static void printCacheCapacities(Problem problem) {
+        int minCapacity = Integer.MAX_VALUE;
+        int maxCapacity = 0;
+        double averageCapacity = 0;
+        for (Cache cache : problem.caches) {
+            averageCapacity += cache.currentCapacity;
+            if (cache.currentCapacity > maxCapacity) {
+                maxCapacity = cache.currentCapacity;
+            } else if (cache.currentCapacity < minCapacity) {
+                minCapacity = cache.currentCapacity;
+            }
+        }
+        averageCapacity /= problem.caches.size();
+        System.out.println("Cache status:  min: " + minCapacity + " max: " + maxCapacity + " avg " + averageCapacity);
     }
 
     private static GainEsperance applyingFirstEsperance(List<GainEsperance> gainEsperances) {
@@ -137,7 +149,7 @@ public class Qualification {
     }
 
     private static void orderByMostGain(List<GainEsperance> gainEsperances) {
-        System.out.println("orderByMostGain " + gainEsperances.size() + " esperances");
+        // System.out.println("orderByMostGain " + gainEsperances.size() + " esperances");
         Collections.sort(gainEsperances, new Comparator<GainEsperance>() {
             public int compare(GainEsperance o1, GainEsperance o2) {
                 if (o2.gain > o1.gain) {
@@ -151,7 +163,7 @@ public class Qualification {
         });
     }
 
-    private static void removeRequestAlreadySatisfiedAndGainWithNoRequest(List<GainEsperance> gainEsperances) {
+    private static int removeRequestAlreadySatisfiedAndGainWithNoRequest(List<GainEsperance> gainEsperances) {
         Iterator<GainEsperance> gainEsperanceIterator = gainEsperances.iterator();
         int totalNumberOfRequestLeft = 0;
         while (gainEsperanceIterator.hasNext()) {
@@ -186,12 +198,14 @@ public class Qualification {
             }
         }
 
-        System.out.println("removeRequestAlreadySatisfiedAndGainWithNoRequest "
-                + gainEsperances.size() + " gain esperances left for "
-                + totalNumberOfRequestLeft + " total request left");
+        // System.out.println("removeRequestAlreadySatisfiedAndGainWithNoRequest "
+        //        + gainEsperances.size() + " gain esperances left for "
+        //        + totalNumberOfRequestLeft + " total request left");
+        return totalNumberOfRequestLeft;
     }
 
     private static void recomputeGainEsperancesGain(List<GainEsperance> gainEsperances, double numberOfRequestInTotal) {
+        // System.out.println("recomputeGainEsperancesGain for " + gainEsperances.size() + " gain esperances");
         for (GainEsperance gainEsperance : gainEsperances) {
             gainEsperance.gain = 0;
             for (RequestFromEndPointToCache request : gainEsperance.associatedRequests) {
@@ -201,25 +215,22 @@ public class Qualification {
         }
     }
 
-    private static List<GainEsperance> createGainEsperances(List<RequestFromEndPointToCache> allRequests, double numberOfRequestInTotal) {
-        int size = allRequests.size();
-        System.out.println("createGainEsperances for " + size);
+    private static List<GainEsperance> createGainEsperances(List<RequestFromEndPointToCache> allRequests) {
+        int numberOfRequests = allRequests.size();
+        System.out.println("creating GainEsperances for " + numberOfRequests + " requests");
         Map<Pair<Video, Cache>, GainEsperance> esperanceHashMap = new HashMap<Pair<Video, Cache>, GainEsperance>();
 
-        int i = 0;
         Iterator<RequestFromEndPointToCache> iterator = allRequests.iterator();
         while (iterator.hasNext()) {
             RequestFromEndPointToCache request = iterator.next();
             GainEsperance gainEsperance = getGainEsperanceForVideoAndCache(esperanceHashMap, request.video, request.cache);
             gainEsperance.associatedRequests.add(request);
-
-            i++;
-            if (i % (size / 10) == 0) {
-                // System.out.println("getGainEsperances " + i + " / " + size);
-            }
         }
 
-        return new ArrayList<GainEsperance>(esperanceHashMap.values());
+
+        Collection<GainEsperance> gainEsperances = esperanceHashMap.values();
+        System.out.println(gainEsperances.size() + " gain esperances created");
+        return new ArrayList<GainEsperance>(gainEsperances);
     }
 
 
