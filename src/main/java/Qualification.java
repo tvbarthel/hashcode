@@ -49,15 +49,8 @@ public class Qualification {
 
         for (Request request : requests) {
             ArrayList<Latency> latencies = request.endPoint.latencies;
-
-            double avg = 0;
-            int t = 1;
             for (Latency latency : latencies) {
-                avg += (latency.value - avg) / t;
-            }
-
-            for (Latency latency : latencies) {
-                if (latency.value < avg && latency.cache.id == cache.id) {
+                if (latency.cache.id == cache.id) {
                     RequestFromEndPointToCache requestFromEndPointToCache =
                             new RequestFromEndPointToCache(request.video, request.endPoint,
                                     cache, request.number, latency.value);
@@ -76,31 +69,23 @@ public class Qualification {
 
         double avg = 0;
         int t = 1;
+        double numberOfRequestInTotal = 0;
         for (Request request : problem.requests) {
             avg += (request.number - avg) / t;
+            numberOfRequestInTotal += request.number;
         }
         System.out.println("Average request number: " + avg + " for " + problem.requests.size() + " requests ");
-
-
-        int numberOfRequestRemoved = 0;
-        ArrayList<Request> filteredRequest = new ArrayList<Request>();
-        for (Request candidate : problem.requests) {
-            if (candidate.number > avg * 3.5) {
-                filteredRequest.add(candidate);
-            }
-        }
-
-        System.out.println("Removed: " + numberOfRequestRemoved + " requests");
+        System.out.println("Number of request in total " + numberOfRequestInTotal);
 
         List<RequestFromEndPointToCache> allRequests = new ArrayList<RequestFromEndPointToCache>();
         for (Cache cache : problem.caches) {
             System.out.println("Computing request from end point to cache " + cache.id);
-            List<RequestFromEndPointToCache> requestList = getRequestToCache(cache, filteredRequest);
+            List<RequestFromEndPointToCache> requestList = getRequestToCache(cache, problem.requests);
             allRequests.addAll(requestList);
         }
 
 
-        List<GainEsperance> gainEsperances = getGainEsperances(allRequests);
+        List<GainEsperance> gainEsperances = getGainEsperances(allRequests, numberOfRequestInTotal);
         orderByMostGain(gainEsperances);
         applyingEsperances(gainEsperances);
 
@@ -135,12 +120,18 @@ public class Qualification {
         System.out.println("orderByMostGain " + gainEsperances.size() + " esperances");
         Collections.sort(gainEsperances, new Comparator<GainEsperance>() {
             public int compare(GainEsperance o1, GainEsperance o2) {
-                return o2.gain - o1.gain;
+                if (o2.gain > o1.gain) {
+                    return 1;
+                } else if (o2.gain < o1.gain) {
+                    return -1;
+                } else {
+                    return 0;
+                }
             }
         });
     }
 
-    private static List<GainEsperance> getGainEsperances(List<RequestFromEndPointToCache> allRequests) {
+    private static List<GainEsperance> getGainEsperances(List<RequestFromEndPointToCache> allRequests, double numberOfRequestInTotal) {
         int size = allRequests.size();
         System.out.println("getGainEsperances for " + size);
         Map<Pair<Video, Cache>, GainEsperance> esperanceHashMap = new HashMap<Pair<Video, Cache>, GainEsperance>();
@@ -148,7 +139,8 @@ public class Qualification {
         int i = 0;
         for (RequestFromEndPointToCache request : allRequests) {
             GainEsperance gainEsperance = getGainEsperanceForVideoAndCache(esperanceHashMap, request.video, request.cache);
-            gainEsperance.gain += (request.number * (request.endPoint.latencyFromDataCenter - request.latencyValue));
+            float timeSaved = request.number * (float) (request.endPoint.latencyFromDataCenter - request.latencyValue);
+            gainEsperance.gain += timeSaved / request.video.size / numberOfRequestInTotal;
             i++;
 
             if (i % (size / 100) == 0) {
@@ -545,7 +537,7 @@ public class Qualification {
     public static class GainEsperance {
         public final Video video;
         public final Cache cache;
-        public int gain;
+        public double gain;
 
         public GainEsperance(Video video, Cache cache) {
             this.video = video;
