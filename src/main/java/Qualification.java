@@ -101,9 +101,9 @@ public class Qualification {
 //        cacheMostLightVideosFirst(problem.caches, problem.requests, problem.videos);
 //        maxScore = keepHighestScore(problem, maxScore, maxCache);
 //
-//        System.out.println("cacheMostRequestedVideosFirst: ");
-//        cacheMostRequestedVideosFirst(problem.caches, problem.requests, problem.videos);
-//        maxScore = keepHighestScore(problem, maxScore, maxCache);
+        System.out.println("cacheMostRequestedVideosFirst: ");
+        cacheMostRequestedVideosFirst(problem.caches, problem.requests, problem.videos);
+        maxScore = keepHighestScore(problem, maxScore, maxCache);
 //
 //        System.out.println("cacheMostRequestedVideosFirst: ");
 //        cacheMostTimeSaveVideosFirst(problem.caches, problem.requests, problem.videos);
@@ -317,13 +317,15 @@ public class Qualification {
     public static void cacheMostRequestedVideosFirst(ArrayList<Cache> caches, ArrayList<Request> requests, ArrayList<Video> videos) {
         resetCache(caches);
 
-        Collections.sort(videos, new Comparator<Video>() {
-            public int compare(Video o1, Video o2) {
-                return o2.requestedTime - o1.requestedTime;
-            }
-        });
-        for (Video video : videos) {
-            for (Cache cache : caches) {
+        for (final Cache cache : caches) {
+
+            Collections.sort(videos, new Comparator<Video>() {
+                public int compare(Video o1, Video o2) {
+                    return o2.requestedTimePerCacheId[cache.id] - o1.requestedTimePerCacheId[cache.id];
+                }
+            });
+
+            for (Video video : videos) {
                 if (video.targetCacheIds.contains(cache.id)) {
                     if (cache.currentCapacity > 0 && cache.currentCapacity - video.size > 0) {
                         if (!cache.videos.contains(video)) {
@@ -343,8 +345,8 @@ public class Qualification {
         for (final Cache cache : caches) {
             Collections.sort(videos, new Comparator<Video>() {
                 public int compare(Video o1, Video o2) {
-                    Integer i1 = (int) (o1.averageTimeSavedPerCache.get(cache.id) / (float) o1.size);
-                    Integer i2 = (int) (o2.averageTimeSavedPerCache.get(cache.id) / (float) o2.size);
+                    Integer i1 = (int) (o1.timeSavedPerCacheId[cache.id] / (float) o1.size);
+                    Integer i2 = (int) (o2.timeSavedPerCacheId[cache.id] / (float) o2.size);
                     return i2 - i1;
                 }
             });
@@ -369,8 +371,8 @@ public class Qualification {
         for (final Cache cache : caches) {
             Collections.sort(videos, new Comparator<Video>() {
                 public int compare(Video o1, Video o2) {
-                    Integer i1 = o1.averageTimeSavedPerCache.get(cache.id);
-                    Integer i2 = o2.averageTimeSavedPerCache.get(cache.id);
+                    Integer i1 = o1.timeSavedPerCacheId[cache.id];
+                    Integer i2 = o2.timeSavedPerCacheId[cache.id];
                     return i2 - i1;
                 }
             });
@@ -465,8 +467,13 @@ public class Qualification {
                 int videoSize = Integer.parseInt(videosSize[i]);
                 Video video = new Video(i, videoSize);
                 videos.add(video);
+                video.timeSavedPerCacheId = new int[caches.size()];
+                video.requestedTimePerCacheId = new int[caches.size()];
+                video.scoreIfCachePerCacheId = new int[caches.size()];
                 for (Cache cache : caches) {
-                    video.averageTimeSavedPerCache.put(cache.id, 0);
+                    video.timeSavedPerCacheId[cache.id] = 0;
+                    video.requestedTimePerCacheId[cache.id] = 0;
+                    video.scoreIfCachePerCacheId[cache.id] = 0;
                 }
             }
 
@@ -504,17 +511,20 @@ public class Qualification {
                 Request request = new Request(video, endPoint, number);
                 requests.add(request);
 
-                video.requestedTime += request.number;
                 int time;
                 for (Latency latency : endPoint.latencies) {
                     time = request.number * (endPoint.latencyFromDataCenter - latency.value) / 100;
-                    Integer currentTimeSaved = video.averageTimeSavedPerCache.get(latency.cache.id);
-                    if (currentTimeSaved != null) {
-                        time += currentTimeSaved;
-                    }
-                    video.averageTimeSavedPerCache.put(latency.cache.id, time);
+                    int currentTimeSaved = video.timeSavedPerCacheId[latency.cache.id];
+                    video.timeSavedPerCacheId[latency.cache.id] = currentTimeSaved + time;
+
+                    int currentRequestedTime = video.requestedTimePerCacheId[latency.cache.id];
+                    video.requestedTimePerCacheId[latency.cache.id] = currentRequestedTime + request.number;
                 }
             }
+
+            // compute score
+
+
 
             return new Problem(videos, caches, requests, endPoints);
         } catch (FileNotFoundException e) {
@@ -547,15 +557,14 @@ public class Qualification {
         public final int id;
         public final int size;
         public final ArrayList<Integer> targetCacheIds;
-        public int requestedTime;
-        public final HashMap<Integer, Integer> averageTimeSavedPerCache;
+        public int[] requestedTimePerCacheId;
+        public int[] timeSavedPerCacheId;
+        public int[] scoreIfCachePerCacheId;
 
         public Video(int id, int size) {
             this.id = id;
             this.size = size;
             targetCacheIds = new ArrayList<Integer>();
-            requestedTime = 0;
-            averageTimeSavedPerCache = new HashMap<Integer, Integer>();
         }
 
         @Override
