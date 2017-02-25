@@ -22,14 +22,16 @@ public class Qualification {
     private static final String WORTH_SPREADING_IN = "files/qualification_2017/videos_worth_spreading.in";
     private static final String WORTH_SPREADING_OUT = "files/qualification_2017/videos_worth_spreading.out";
 
+    private static final int BUCKET_SIZE = 1000;
+
 
     public static void main(String[] args) {
         System.out.println("Welcome to the qualification round!");
 
         // solve(KITTEN_IN, KITTEN_OUT);
-        solve(ZOO_IN, ZOO_OUT);
+        // solve(ZOO_IN, ZOO_OUT);
         // solve(TRENDING_IN, TRENDING_OUT);
-        // solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
+        solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
 
         System.out.println("Bye bye to the qualification round!");
     }
@@ -83,23 +85,55 @@ public class Qualification {
             allRequests.addAll(requestList);
         }
 
-        List<GainEsperance> gainEsperances = createGainEsperances(allRequests);
-        int appliedEsperances = 0;
-        GainEsperance appliedGainEsperances;
-        do {
-            int numberOfRequestLeft = removeRequestAlreadySatisfiedAndGainWithNoRequest(gainEsperances);
-            recomputeGainEsperancesGain(gainEsperances, numberOfRequestInTotal);
-            orderByMostGain(gainEsperances);
-            appliedGainEsperances = applyingFirstEsperance(gainEsperances);
+        List<GainEsperance> allGainEsperances = createGainEsperances(allRequests);
+        recomputeGainEsperancesGain(allGainEsperances, numberOfRequestInTotal);
+        List<GainEsperance> bucketBestGainEsperances = new ArrayList<GainEsperance>();
+        double bestGainOfOtherEsperances = Double.MAX_VALUE;
 
-            appliedEsperances++;
-            if (appliedEsperances % 50 == 0) {
+        GainEsperance appliedEsperancesFromBucket = null;
+        int appliedEsperances = 0;
+        int bucketSize = BUCKET_SIZE;
+        do {
+            boolean isBucketEmpty = bucketBestGainEsperances.isEmpty();
+            if (isBucketEmpty
+                    || appliedEsperancesFromBucket == null
+                    || bestGainOfOtherEsperances > bucketBestGainEsperances.get(0).gain) {
+                if (isBucketEmpty) {
+                    System.out.println("Recomputing bucket because empty");
+                } else if (appliedEsperancesFromBucket == null) {
+                    System.out.println("Recomputing bucket because nothing applied from current bucket");
+                    bucketSize *= 2;
+                    System.out.println("Increasing size to " + bucketSize);
+                } else {
+                    System.out.println("Recomputing bucket because better gain in other " +
+                            bucketBestGainEsperances.get(0).gain + " < " + bestGainOfOtherEsperances);
+                }
+
+                removeUselessEsperances(allGainEsperances);
+                recomputeGainEsperancesGain(allGainEsperances, numberOfRequestInTotal);
+                orderByMostGain(allGainEsperances);
+
+                bucketSize = Math.min(bucketSize, allGainEsperances.size());
+                bucketBestGainEsperances = allGainEsperances.subList(0, bucketSize);
+                bestGainOfOtherEsperances = bucketSize == allGainEsperances.size()
+                        ? 0 : allGainEsperances.get(bucketSize).gain;
+
+                System.out.println("New best esperances in other " + bestGainOfOtherEsperances);
+            }
+
+            removeUselessEsperances(bucketBestGainEsperances);
+            recomputeGainEsperancesGain(bucketBestGainEsperances, numberOfRequestInTotal);
+            orderByMostGain(bucketBestGainEsperances);
+            appliedEsperancesFromBucket = applyingFirstEsperance(bucketBestGainEsperances);
+
+            if (appliedEsperances % 10 == 0) {
                 System.out.println("Applied esperances " + appliedEsperances +
-                        " still " + gainEsperances.size() + " gain esperances with " +
-                        numberOfRequestLeft + " requests");
+                        " still " + bucketBestGainEsperances.size() + " gain esperances in bucket and " +
+                        allGainEsperances.size() + " esperances in total");
                 printCacheCapacities(problem);
             }
-        } while (appliedGainEsperances != null);
+            appliedEsperances++;
+        } while (appliedEsperancesFromBucket != null || bucketBestGainEsperances.size() != allGainEsperances.size());
 
         printCacheCapacities(problem);
 
@@ -125,16 +159,46 @@ public class Qualification {
         System.out.println("Cache status:  min: " + minCapacity + " max: " + maxCapacity + " avg " + averageCapacity);
     }
 
-    private static GainEsperance applyingFirstEsperance(List<GainEsperance> gainEsperances) {
-        for (GainEsperance gainEsperance : gainEsperances) {
-            if (gainEsperance.cache.currentCapacity >= gainEsperance.video.size
-                    && !gainEsperance.cache.videos.contains(gainEsperance.video)) {
-                gainEsperance.cache.currentCapacity -= gainEsperance.video.size;
-                gainEsperance.cache.videos.add(gainEsperance.video);
-                return gainEsperance;
+    private static void removeUselessEsperances(List<GainEsperance> gainEsperances) {
+        for (int esperanceIndex = gainEsperances.size() - 1; esperanceIndex >= 0; esperanceIndex--) {
+            GainEsperance candidateGainEsperance = gainEsperances.get(esperanceIndex);
+            if (candidateGainEsperance.cache.currentCapacity < candidateGainEsperance.video.size
+                    || candidateGainEsperance.cache.videos.contains(candidateGainEsperance.video)) {
+                // Too big to fit or already there
+                gainEsperances.remove(esperanceIndex);
+            } else {
+                ArrayList<RequestFromEndPointToCache> associatedRequests = candidateGainEsperance.associatedRequests;
+                for (int requestIndex = associatedRequests.size() - 1; requestIndex >= 0; requestIndex--) {
+                    RequestFromEndPointToCache candidateRequest = associatedRequests.get(requestIndex);
+                    boolean isAlreadySatisfied = false;
+                    for (Latency latency : candidateRequest.endPoint.latencies) {
+                        if (latency.cache.videos.contains(candidateRequest.video) && latency.value < candidateRequest.latencyValue) {
+                            isAlreadySatisfied = true;
+                            break;
+                        }
+                    }
+
+                    if (isAlreadySatisfied) {
+                        associatedRequests.remove(requestIndex);
+                    }
+                }
+
+                if (associatedRequests.isEmpty()) {
+                    gainEsperances.remove(esperanceIndex);
+                }
             }
         }
-        return null;
+    }
+
+    private static GainEsperance applyingFirstEsperance(List<GainEsperance> gainEsperances) {
+        if (gainEsperances.isEmpty()) {
+            return null;
+        }
+
+        final GainEsperance gainEsperance = gainEsperances.get(0);
+        gainEsperance.cache.currentCapacity -= gainEsperance.video.size;
+        gainEsperance.cache.videos.add(gainEsperance.video);
+        return gainEsperance;
     }
 
     private static void applyingEsperances(List<GainEsperance> gainEsperances) {
@@ -164,20 +228,12 @@ public class Qualification {
     }
 
     private static int removeRequestAlreadySatisfiedAndGainWithNoRequest(List<GainEsperance> gainEsperances) {
-        Iterator<GainEsperance> gainEsperanceIterator = gainEsperances.iterator();
         int totalNumberOfRequestLeft = 0;
-        while (gainEsperanceIterator.hasNext()) {
-            GainEsperance gainEsperance = gainEsperanceIterator.next();
-
-            Iterator<RequestFromEndPointToCache> requestIterator = gainEsperance.associatedRequests.iterator();
-            while (requestIterator.hasNext()) {
-                RequestFromEndPointToCache candidate = requestIterator.next();
-                if (candidate.cache.videos.contains(candidate.video)) {
-                    // Video already in cache
-                    requestIterator.remove();
-                    break;
-                }
-
+        for (int esperanceIndex = gainEsperances.size() - 1; esperanceIndex >= 0; esperanceIndex--) {
+            GainEsperance gainEsperance = gainEsperances.get(esperanceIndex);
+            ArrayList<RequestFromEndPointToCache> associatedRequests = gainEsperance.associatedRequests;
+            for (int requestIndex = associatedRequests.size() - 1; requestIndex >= 0; requestIndex--) {
+                RequestFromEndPointToCache candidate = associatedRequests.get(requestIndex);
                 boolean isAlreadySatisfied = false;
                 for (Latency latency : candidate.endPoint.latencies) {
                     if (latency.cache.videos.contains(candidate.video) && latency.value < candidate.latencyValue) {
@@ -187,14 +243,14 @@ public class Qualification {
                 }
 
                 if (isAlreadySatisfied) {
-                    requestIterator.remove();
+                    associatedRequests.remove(requestIndex);
                 }
             }
 
-            int numberOfRequestLeft = gainEsperance.associatedRequests.size();
+            int numberOfRequestLeft = associatedRequests.size();
             totalNumberOfRequestLeft += numberOfRequestLeft;
             if (numberOfRequestLeft == 0) {
-                gainEsperanceIterator.remove();
+                gainEsperances.remove(esperanceIndex);
             }
         }
 
@@ -204,15 +260,21 @@ public class Qualification {
         return totalNumberOfRequestLeft;
     }
 
-    private static void recomputeGainEsperancesGain(List<GainEsperance> gainEsperances, double numberOfRequestInTotal) {
+    private static double recomputeGainEsperancesGain(List<GainEsperance> gainEsperances, double numberOfRequestInTotal) {
         // System.out.println("recomputeGainEsperancesGain for " + gainEsperances.size() + " gain esperances");
+        double maxGain = 0;
         for (GainEsperance gainEsperance : gainEsperances) {
             gainEsperance.gain = 0;
             for (RequestFromEndPointToCache request : gainEsperance.associatedRequests) {
                 float timeSaved = request.number * (float) (request.endPoint.latencyFromDataCenter - request.latencyValue);
                 gainEsperance.gain += timeSaved / request.video.size / numberOfRequestInTotal;
             }
+
+            if (gainEsperance.gain > maxGain) {
+                maxGain = gainEsperance.gain;
+            }
         }
+        return maxGain;
     }
 
     private static List<GainEsperance> createGainEsperances(List<RequestFromEndPointToCache> allRequests) {
