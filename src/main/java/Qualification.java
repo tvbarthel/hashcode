@@ -22,7 +22,8 @@ public class Qualification {
     private static final String WORTH_SPREADING_IN = "files/qualification_2017/videos_worth_spreading.in";
     private static final String WORTH_SPREADING_OUT = "files/qualification_2017/videos_worth_spreading.out";
 
-    private static final int BUCKET_SIZE = 1000;
+    private static final int BUCKET_SIZE = 20000;
+    private static final int MAX_GAIN_ESPERANCES_SIZE = 1100000;
 
 
     public static void main(String[] args) {
@@ -30,8 +31,8 @@ public class Qualification {
 
         // solve(KITTEN_IN, KITTEN_OUT);
         // solve(ZOO_IN, ZOO_OUT);
-        // solve(TRENDING_IN, TRENDING_OUT);
-        solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
+        solve(TRENDING_IN, TRENDING_OUT);
+        // solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
 
         System.out.println("Bye bye to the qualification round!");
     }
@@ -78,15 +79,23 @@ public class Qualification {
         System.out.println("Average request number: " + avg + " for " + problem.requests.size() + " requests ");
         System.out.println("Number of request in total " + numberOfRequestInTotal);
 
-        List<RequestFromEndPointToCache> allRequests = new ArrayList<RequestFromEndPointToCache>();
+        List<RequestFromEndPointToCache> allRequestsFromEndPointToCache = new ArrayList<RequestFromEndPointToCache>();
         for (Cache cache : problem.caches) {
             System.out.println("Computing request from end point to cache " + cache.id);
             List<RequestFromEndPointToCache> requestList = getRequestToCache(cache, problem.requests);
-            allRequests.addAll(requestList);
+            allRequestsFromEndPointToCache.addAll(requestList);
         }
 
-        List<GainEsperance> allGainEsperances = createGainEsperances(allRequests);
+        List<GainEsperance> allGainEsperances = createGainEsperances(allRequestsFromEndPointToCache);
         recomputeGainEsperancesGain(allGainEsperances, numberOfRequestInTotal);
+        orderByMostGain(allGainEsperances);
+
+        if (allGainEsperances.size() > MAX_GAIN_ESPERANCES_SIZE) {
+            System.out.println("That's a lot of gain esperances: " + allGainEsperances.size());
+            System.out.println("Only take the first " + MAX_GAIN_ESPERANCES_SIZE);
+            allGainEsperances = allGainEsperances.subList(0, MAX_GAIN_ESPERANCES_SIZE);
+        }
+
         List<GainEsperance> bucketBestGainEsperances = new ArrayList<GainEsperance>();
         double bestGainOfOtherEsperances = Double.MAX_VALUE;
 
@@ -109,8 +118,11 @@ public class Qualification {
                             bucketBestGainEsperances.get(0).gain + " < " + bestGainOfOtherEsperances);
                 }
 
+                System.out.println("Removing useless esperances for all " + System.currentTimeMillis());
                 removeUselessEsperances(allGainEsperances);
+                System.out.println("Recomputing gain for all " + System.currentTimeMillis());
                 recomputeGainEsperancesGain(allGainEsperances, numberOfRequestInTotal);
+                System.out.println("Ordering for all " + System.currentTimeMillis());
                 orderByMostGain(allGainEsperances);
 
                 bucketSize = Math.min(bucketSize, allGainEsperances.size());
@@ -172,7 +184,7 @@ public class Qualification {
                     RequestFromEndPointToCache candidateRequest = associatedRequests.get(requestIndex);
                     boolean isAlreadySatisfied = false;
                     for (Latency latency : candidateRequest.endPoint.latencies) {
-                        if (latency.cache.videos.contains(candidateRequest.video) && latency.value < candidateRequest.latencyValue) {
+                        if (latency.cache.videos.contains(candidateRequest.video) && latency.value <= candidateRequest.latencyValue) {
                             isAlreadySatisfied = true;
                             break;
                         }
