@@ -1,7 +1,9 @@
-import javafx.util.Pair;
-
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /**
  * Qualification Round 2017
@@ -22,8 +24,8 @@ public class Qualification {
     private static final String WORTH_SPREADING_IN = "files/qualification_2017/videos_worth_spreading.in";
     private static final String WORTH_SPREADING_OUT = "files/qualification_2017/videos_worth_spreading.out";
 
-    private static final int BUCKET_SIZE = 20000;
-    private static final int MAX_GAIN_ESPERANCES_SIZE = 1100000;
+    private static final int BUCKET_SIZE = 500;
+    private static final int MAX_GAIN_ESPERANCES_SIZE = 1_500_000;
 
 
     public static void main(String[] args) {
@@ -31,8 +33,8 @@ public class Qualification {
 
         // solve(KITTEN_IN, KITTEN_OUT);
         // solve(ZOO_IN, ZOO_OUT);
-        solve(TRENDING_IN, TRENDING_OUT);
-        // solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
+        // solve(TRENDING_IN, TRENDING_OUT);
+        solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
 
         System.out.println("Bye bye to the qualification round!");
     }
@@ -72,6 +74,7 @@ public class Qualification {
         double avg = 0;
         int t = 1;
         double numberOfRequestInTotal = 0;
+
         for (Request request : problem.requests) {
             avg += (request.number - avg) / t;
             numberOfRequestInTotal += request.number;
@@ -79,13 +82,8 @@ public class Qualification {
         System.out.println("Average request number: " + avg + " for " + problem.requests.size() + " requests ");
         System.out.println("Number of request in total " + numberOfRequestInTotal);
 
-        List<RequestFromEndPointToCache> allRequestsFromEndPointToCache = new ArrayList<RequestFromEndPointToCache>();
-        for (Cache cache : problem.caches) {
-            System.out.println("Computing request from end point to cache " + cache.id);
-            List<RequestFromEndPointToCache> requestList = getRequestToCache(cache, problem.requests);
-            allRequestsFromEndPointToCache.addAll(requestList);
-        }
-
+        List<RequestFromEndPointToCache> allRequestsFromEndPointToCache =
+                createRequestFromEndPointToCaches(in, problem, problem.requests);
         List<GainEsperance> allGainEsperances = createGainEsperances(allRequestsFromEndPointToCache);
         recomputeGainEsperancesGain(allGainEsperances, numberOfRequestInTotal);
         orderByMostGain(allGainEsperances);
@@ -96,8 +94,8 @@ public class Qualification {
             allGainEsperances = allGainEsperances.subList(0, MAX_GAIN_ESPERANCES_SIZE);
         }
 
-        List<GainEsperance> bucketBestGainEsperances = new ArrayList<GainEsperance>();
-        double bestGainOfOtherEsperances = Double.MAX_VALUE;
+        List<GainEsperance> bucketBestGainEsperances = new ArrayList<>();
+        double bestGainOfOtherEsperances = 0d;
 
         GainEsperance appliedEsperancesFromBucket = null;
         int appliedEsperances = 0;
@@ -106,7 +104,7 @@ public class Qualification {
             boolean isBucketEmpty = bucketBestGainEsperances.isEmpty();
             if (isBucketEmpty
                     || appliedEsperancesFromBucket == null
-                    || bestGainOfOtherEsperances > bucketBestGainEsperances.get(0).gain) {
+                    || Double.compare(bestGainOfOtherEsperances, bucketBestGainEsperances.get(0).gain) > 0) {
                 if (isBucketEmpty) {
                     System.out.println("Recomputing bucket because empty");
                 } else if (appliedEsperancesFromBucket == null) {
@@ -119,7 +117,7 @@ public class Qualification {
                 }
 
                 System.out.println("Removing useless esperances for all " + System.currentTimeMillis());
-                removeUselessEsperances(allGainEsperances);
+                removeUselessEsperances(allGainEsperances, true);
                 System.out.println("Recomputing gain for all " + System.currentTimeMillis());
                 recomputeGainEsperancesGain(allGainEsperances, numberOfRequestInTotal);
                 System.out.println("Ordering for all " + System.currentTimeMillis());
@@ -131,14 +129,15 @@ public class Qualification {
                         ? 0 : allGainEsperances.get(bucketSize).gain;
 
                 System.out.println("New best esperances in other " + bestGainOfOtherEsperances);
+            } else {
+                removeUselessEsperances(bucketBestGainEsperances, true);
+                recomputeGainEsperancesGain(bucketBestGainEsperances, numberOfRequestInTotal);
+                orderByMostGain(bucketBestGainEsperances);
             }
 
-            removeUselessEsperances(bucketBestGainEsperances);
-            recomputeGainEsperancesGain(bucketBestGainEsperances, numberOfRequestInTotal);
-            orderByMostGain(bucketBestGainEsperances);
             appliedEsperancesFromBucket = applyingFirstEsperance(bucketBestGainEsperances);
 
-            if (appliedEsperances % 10 == 0) {
+            if (appliedEsperances % 30 == 0) {
                 System.out.println("Applied esperances " + appliedEsperances +
                         " still " + bucketBestGainEsperances.size() + " gain esperances in bucket and " +
                         allGainEsperances.size() + " esperances in total");
@@ -153,6 +152,27 @@ public class Qualification {
         System.out.println("New score: " + score);
 
         write_solution(out, problem.caches);
+    }
+
+    private static List<RequestFromEndPointToCache> createRequestFromEndPointToCaches(String in, Problem problem, List<Request> subListRequests) {
+        List<RequestFromEndPointToCache> allRequestsFromEndPointToCache = new ArrayList<>();
+        AtomicInteger atomicInteger = new AtomicInteger(problem.caches.size());
+
+        problem.caches.parallelStream().forEach(cache -> {
+            int remainingCaches = atomicInteger.decrementAndGet();
+            System.out.println("Computing request from end point to cache " + cache.id + " remaining " + remainingCaches + " on thread " + Thread.currentThread().getName());
+            List<RequestFromEndPointToCache> requestList = getRequestToCache(cache, subListRequests);
+            synchronized (allRequestsFromEndPointToCache) {
+                allRequestsFromEndPointToCache.addAll(requestList);
+            }
+        });
+
+        /*if (KITTEN_IN.equals(in)) {
+            allRequestsFromEndPointToCache.sort((o1, o2) -> o2.number - o1.number);
+            System.out.println("Ouch that's a lot of request from endpoint to cache: " + allRequestsFromEndPointToCache.size());
+            allRequestsFromEndPointToCache = allRequestsFromEndPointToCache.subList(0, Math.min(40_000_000, allRequestsFromEndPointToCache.size()));
+        }*/
+        return allRequestsFromEndPointToCache;
     }
 
     private static void printCacheCapacities(Problem problem) {
@@ -171,31 +191,36 @@ public class Qualification {
         System.out.println("Cache status:  min: " + minCapacity + " max: " + maxCapacity + " avg " + averageCapacity);
     }
 
-    private static void removeUselessEsperances(List<GainEsperance> gainEsperances) {
-        for (int esperanceIndex = gainEsperances.size() - 1; esperanceIndex >= 0; esperanceIndex--) {
-            GainEsperance candidateGainEsperance = gainEsperances.get(esperanceIndex);
-            if (candidateGainEsperance.cache.currentCapacity < candidateGainEsperance.video.size
-                    || candidateGainEsperance.cache.videos.contains(candidateGainEsperance.video)) {
-                // Too big to fit or already there
-                gainEsperances.remove(esperanceIndex);
-            } else {
-                ArrayList<RequestFromEndPointToCache> associatedRequests = candidateGainEsperance.associatedRequests;
-                for (int requestIndex = associatedRequests.size() - 1; requestIndex >= 0; requestIndex--) {
-                    RequestFromEndPointToCache candidateRequest = associatedRequests.get(requestIndex);
-                    boolean isAlreadySatisfied = false;
-                    for (Latency latency : candidateRequest.endPoint.latencies) {
-                        if (latency.cache.videos.contains(candidateRequest.video) && latency.value <= candidateRequest.latencyValue) {
-                            isAlreadySatisfied = true;
-                            break;
+    private static void removeUselessEsperances(List<GainEsperance> gainEsperances, boolean remove) {
+        gainEsperances.parallelStream()
+                .forEach(gainEsperance -> {
+                    if (gainEsperance.cache.currentCapacity >= gainEsperance.video.size
+                            && !gainEsperance.cache.videos.contains(gainEsperance.video)) {
+                        ArrayList<RequestFromEndPointToCache> associatedRequests = gainEsperance.associatedRequests;
+                        for (int requestIndex = associatedRequests.size() - 1; requestIndex >= 0; requestIndex--) {
+                            RequestFromEndPointToCache candidateRequest = associatedRequests.get(requestIndex);
+                            boolean isAlreadySatisfied = false;
+                            for (Latency latency : candidateRequest.endPoint.latencies) {
+                                if (latency.cache.videos.contains(candidateRequest.video) && latency.value <= candidateRequest.latencyValue) {
+                                    isAlreadySatisfied = true;
+                                    break;
+                                }
+                            }
+
+                            if (isAlreadySatisfied) {
+                                associatedRequests.remove(requestIndex);
+                            }
                         }
                     }
+                });
 
-                    if (isAlreadySatisfied) {
-                        associatedRequests.remove(requestIndex);
-                    }
-                }
-
-                if (associatedRequests.isEmpty()) {
+        if (remove) {
+            for (int esperanceIndex = gainEsperances.size() - 1; esperanceIndex >= 0; esperanceIndex--) {
+                GainEsperance candidateGainEsperance = gainEsperances.get(esperanceIndex);
+                if (candidateGainEsperance.cache.currentCapacity < candidateGainEsperance.video.size
+                        || candidateGainEsperance.associatedRequests.isEmpty()
+                        || candidateGainEsperance.cache.videos.contains(candidateGainEsperance.video)) {
+                    // Too big to fit or already there or no associated request
                     gainEsperances.remove(esperanceIndex);
                 }
             }
@@ -225,18 +250,7 @@ public class Qualification {
     }
 
     private static void orderByMostGain(List<GainEsperance> gainEsperances) {
-        // System.out.println("orderByMostGain " + gainEsperances.size() + " esperances");
-        Collections.sort(gainEsperances, new Comparator<GainEsperance>() {
-            public int compare(GainEsperance o1, GainEsperance o2) {
-                if (o2.gain > o1.gain) {
-                    return 1;
-                } else if (o2.gain < o1.gain) {
-                    return -1;
-                } else {
-                    return 0;
-                }
-            }
-        });
+        gainEsperances.sort((o1, o2) -> Double.compare(o2.gain, o1.gain));
     }
 
     private static int removeRequestAlreadySatisfiedAndGainWithNoRequest(List<GainEsperance> gainEsperances) {
@@ -272,39 +286,34 @@ public class Qualification {
         return totalNumberOfRequestLeft;
     }
 
-    private static double recomputeGainEsperancesGain(List<GainEsperance> gainEsperances, double numberOfRequestInTotal) {
-        // System.out.println("recomputeGainEsperancesGain for " + gainEsperances.size() + " gain esperances");
-        double maxGain = 0;
-        for (GainEsperance gainEsperance : gainEsperances) {
-            gainEsperance.gain = 0;
-            for (RequestFromEndPointToCache request : gainEsperance.associatedRequests) {
-                float timeSaved = request.number * (float) (request.endPoint.latencyFromDataCenter - request.latencyValue);
-                gainEsperance.gain += timeSaved / request.video.size / numberOfRequestInTotal;
-            }
-
-            if (gainEsperance.gain > maxGain) {
-                maxGain = gainEsperance.gain;
-            }
-        }
-        return maxGain;
+    private static void recomputeGainEsperancesGain(List<GainEsperance> gainEsperances, double numberOfRequestInTotal) {
+        gainEsperances.parallelStream()
+                .forEach(gainEsperance -> {
+                    gainEsperance.gain = 0;
+                    for (RequestFromEndPointToCache request : gainEsperance.associatedRequests) {
+                        float timeSaved = request.number * (float) (request.endPoint.latencyFromDataCenter - request.latencyValue);
+                        gainEsperance.gain += timeSaved / request.video.size;
+                    }
+                });
     }
 
     private static List<GainEsperance> createGainEsperances(List<RequestFromEndPointToCache> allRequests) {
         int numberOfRequests = allRequests.size();
         System.out.println("creating GainEsperances for " + numberOfRequests + " requests");
-        Map<Pair<Video, Cache>, GainEsperance> esperanceHashMap = new HashMap<Pair<Video, Cache>, GainEsperance>();
 
-        Iterator<RequestFromEndPointToCache> iterator = allRequests.iterator();
-        while (iterator.hasNext()) {
-            RequestFromEndPointToCache request = iterator.next();
-            GainEsperance gainEsperance = getGainEsperanceForVideoAndCache(esperanceHashMap, request.video, request.cache);
-            gainEsperance.associatedRequests.add(request);
-        }
+        ConcurrentMap<Pair<Video, Cache>, List<RequestFromEndPointToCache>> map =
+                allRequests.parallelStream().collect(Collectors.groupingByConcurrent(requestFromEndPointToCache
+                        -> new Pair<>(requestFromEndPointToCache.video, requestFromEndPointToCache.cache)));
 
+        ArrayList<GainEsperance> gainEsperances = new ArrayList<>();
+        map.forEach((videoCachePair, requestFromEndPointToCaches) -> {
+            GainEsperance gainEsperance = new GainEsperance(videoCachePair.key, videoCachePair.value);
+            gainEsperance.associatedRequests.addAll(requestFromEndPointToCaches);
+            gainEsperances.add(gainEsperance);
+        });
 
-        Collection<GainEsperance> gainEsperances = esperanceHashMap.values();
         System.out.println(gainEsperances.size() + " gain esperances created");
-        return new ArrayList<GainEsperance>(gainEsperances);
+        return new ArrayList<>(gainEsperances);
     }
 
 
@@ -345,7 +354,7 @@ public class Qualification {
     }
 
     private static GainEsperance getGainEsperanceForVideoAndCache(Map<Pair<Video, Cache>, GainEsperance> gainEsperances, Video video, Cache cache) {
-        Pair<Video, Cache> videoCachePair = new Pair<Video, Cache>(video, cache);
+        Pair<Video, Cache> videoCachePair = new Pair<>(video, cache);
         GainEsperance gainEsperance = gainEsperances.get(videoCachePair);
 
         if (gainEsperance == null) {
@@ -491,7 +500,7 @@ public class Qualification {
         }
     }
 
-    public static long computeScore(ArrayList<Request> requests) {
+    public static long computeScore(List<Request> requests) {
         System.out.println("computing score");
         long timeSaved = 0;
         long requestNumber = 0;
@@ -588,10 +597,10 @@ public class Qualification {
     }
 
     public static class Problem {
-        public final ArrayList<Video> videos;
-        public final ArrayList<Cache> caches;
-        public final ArrayList<Request> requests;
-        public final ArrayList<EndPoint> endPoints;
+        public final List<Video> videos;
+        public final List<Cache> caches;
+        public final List<Request> requests;
+        public final List<EndPoint> endPoints;
 
         public Problem(ArrayList<Video> videos,
                        ArrayList<Cache> caches,
@@ -630,7 +639,7 @@ public class Qualification {
         }
     }
 
-    public static class Cache {
+    public static final class Cache {
         public final int id;
         public final int initialCapacity;
         public final ArrayList<Video> videos;
@@ -640,7 +649,22 @@ public class Qualification {
             this.id = id;
             this.initialCapacity = initialCapacity;
             this.currentCapacity = initialCapacity;
-            this.videos = new ArrayList<Video>();
+            this.videos = new ArrayList<>();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            Cache cache = (Cache) o;
+
+            return id == cache.id;
+        }
+
+        @Override
+        public int hashCode() {
+            return id;
         }
     }
 
@@ -776,6 +800,116 @@ public class Qualification {
             writer.close();
         } catch (IOException e) {
             System.out.println("error writing file " + e.getMessage());
+        }
+    }
+
+
+    /**
+     * Pair from javafx utils
+     * <p>
+     * javafx.util.Pair
+     *
+     * @param <K>
+     * @param <V>
+     */
+    private static class Pair<K, V> implements Serializable {
+
+        /**
+         * Key of this <code>Pair</code>.
+         */
+        private K key;
+
+        /**
+         * Gets the key for this pair.
+         *
+         * @return key for this pair
+         */
+        public K getKey() {
+            return key;
+        }
+
+        /**
+         * Value of this this <code>Pair</code>.
+         */
+        private V value;
+
+        /**
+         * Gets the value for this pair.
+         *
+         * @return value for this pair
+         */
+        public V getValue() {
+            return value;
+        }
+
+        /**
+         * Creates a new pair
+         *
+         * @param key   The key for this pair
+         * @param value The value to use for this pair
+         */
+        public Pair(K key, V value) {
+            this.key = key;
+            this.value = value;
+        }
+
+        /**
+         * <p><code>String</code> representation of this
+         * <code>Pair</code>.</p>
+         * <p>
+         * <p>The default name/value delimiter '=' is always used.</p>
+         *
+         * @return <code>String</code> representation of this <code>Pair</code>
+         */
+        @Override
+        public String toString() {
+            return key + "=" + value;
+        }
+
+        /**
+         * <p>Generate a hash code for this <code>Pair</code>.</p>
+         * <p>
+         * <p>The hash code is calculated using both the name and
+         * the value of the <code>Pair</code>.</p>
+         *
+         * @return hash code for this <code>Pair</code>
+         */
+        @Override
+        public int hashCode() {
+            // name's hashCode is multiplied by an arbitrary prime number (13)
+            // in order to make sure there is a difference in the hashCode between
+            // these two parameters:
+            //  name: a  value: aa
+            //  name: aa value: a
+            return key.hashCode() * 13 + (value == null ? 0 : value.hashCode());
+        }
+
+        /**
+         * <p>Test this <code>Pair</code> for equality with another
+         * <code>Object</code>.</p>
+         * <p>
+         * <p>If the <code>Object</code> to be tested is not a
+         * <code>Pair</code> or is <code>null</code>, then this method
+         * returns <code>false</code>.</p>
+         * <p>
+         * <p>Two <code>Pair</code>s are considered equal if and only if
+         * both the names and values are equal.</p>
+         *
+         * @param o the <code>Object</code> to test for
+         *          equality with this <code>Pair</code>
+         * @return <code>true</code> if the given <code>Object</code> is
+         * equal to this <code>Pair</code> else <code>false</code>
+         */
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o instanceof Pair) {
+                Pair pair = (Pair) o;
+                if (key != null ? !key.equals(pair.key) : pair.key != null) return false;
+                if (value != null ? !value.equals(pair.value) : pair.value != null) return false;
+                return true;
+            }
+            return false;
         }
     }
 }
