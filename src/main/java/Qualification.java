@@ -24,7 +24,7 @@ public class Qualification {
     private static final String WORTH_SPREADING_IN = "files/qualification_2017/videos_worth_spreading.in";
     private static final String WORTH_SPREADING_OUT = "files/qualification_2017/videos_worth_spreading.out";
 
-    private static final int BUCKET_SIZE = 500;
+    private static final int BUCKET_SIZE = 10_000;
     private static final int MAX_GAIN_ESPERANCES_SIZE = 1_500_000;
 
 
@@ -33,8 +33,8 @@ public class Qualification {
 
         // solve(KITTEN_IN, KITTEN_OUT);
         // solve(ZOO_IN, ZOO_OUT);
-        // solve(TRENDING_IN, TRENDING_OUT);
-        solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
+        solve(TRENDING_IN, TRENDING_OUT);
+        // solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
 
         System.out.println("Bye bye to the qualification round!");
     }
@@ -129,13 +129,13 @@ public class Qualification {
                         ? 0 : allGainEsperances.get(bucketSize).gain;
 
                 System.out.println("New best esperances in other " + bestGainOfOtherEsperances);
-            } else {
-                removeUselessEsperances(bucketBestGainEsperances, true);
-                recomputeGainEsperancesGain(bucketBestGainEsperances, numberOfRequestInTotal);
-                orderByMostGain(bucketBestGainEsperances);
             }
 
             appliedEsperancesFromBucket = applyingFirstEsperance(bucketBestGainEsperances);
+
+            removeUselessEsperances(bucketBestGainEsperances, true);
+            recomputeGainEsperancesGain(bucketBestGainEsperances, numberOfRequestInTotal);
+            orderByMostGain(bucketBestGainEsperances);
 
             if (appliedEsperances % 30 == 0) {
                 System.out.println("Applied esperances " + appliedEsperances +
@@ -232,7 +232,7 @@ public class Qualification {
             return null;
         }
 
-        final GainEsperance gainEsperance = gainEsperances.get(0);
+        final GainEsperance gainEsperance = gainEsperances.remove(0);
         gainEsperance.cache.currentCapacity -= gainEsperance.video.size;
         gainEsperance.cache.videos.add(gainEsperance.video);
         return gainEsperance;
