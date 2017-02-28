@@ -2,7 +2,7 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.ToIntFunction;
 import java.util.stream.Collectors;
 
 /**
@@ -24,16 +24,16 @@ public class Qualification {
     private static final String WORTH_SPREADING_IN = "files/qualification_2017/videos_worth_spreading.in";
     private static final String WORTH_SPREADING_OUT = "files/qualification_2017/videos_worth_spreading.out";
 
-    private static final int BUCKET_SIZE = 10_000;
+    private static final int BUCKET_SIZE = 2_000;
     private static final int MAX_GAIN_ESPERANCES_SIZE = 1_500_000;
 
 
     public static void main(String[] args) {
         System.out.println("Welcome to the qualification round!");
 
-        // solve(KITTEN_IN, KITTEN_OUT);
+        solve(KITTEN_IN, KITTEN_OUT);
         // solve(ZOO_IN, ZOO_OUT);
-        solve(TRENDING_IN, TRENDING_OUT);
+        // solve(TRENDING_IN, TRENDING_OUT);
         // solve(WORTH_SPREADING_IN, WORTH_SPREADING_OUT);
 
         System.out.println("Bye bye to the qualification round!");
@@ -85,7 +85,7 @@ public class Qualification {
         List<RequestFromEndPointToCache> allRequestsFromEndPointToCache =
                 createRequestFromEndPointToCaches(in, problem, problem.requests);
         List<GainEsperance> allGainEsperances = createGainEsperances(allRequestsFromEndPointToCache);
-        recomputeGainEsperancesGain(allGainEsperances, numberOfRequestInTotal);
+        recomputeGainEsperancesGain(allGainEsperances);
         orderByMostGain(allGainEsperances);
 
         if (allGainEsperances.size() > MAX_GAIN_ESPERANCES_SIZE) {
@@ -94,57 +94,38 @@ public class Qualification {
             allGainEsperances = allGainEsperances.subList(0, MAX_GAIN_ESPERANCES_SIZE);
         }
 
-        List<GainEsperance> bucketBestGainEsperances = new ArrayList<>();
-        double bestGainOfOtherEsperances = 0d;
+        int numberOfGainEsperances = allGainEsperances.size();
+        int numberOfBuckets = 1 + numberOfGainEsperances / BUCKET_SIZE;
+        List<List<GainEsperance>> buckets = new ArrayList<>(numberOfBuckets);
+        for (int i = 0; i < numberOfBuckets; i++) {
+            int startIndex = i * BUCKET_SIZE;
+            int stopIndex = Math.min(numberOfGainEsperances, startIndex + BUCKET_SIZE);
+            buckets.add(new ArrayList<>(allGainEsperances.subList(startIndex, stopIndex)));
+        }
+
 
         GainEsperance appliedEsperancesFromBucket = null;
         int appliedEsperances = 0;
-        int bucketSize = BUCKET_SIZE;
+        List<GainEsperance> currentBestBucket = buckets.remove(0);
+
         do {
-            boolean isBucketEmpty = bucketBestGainEsperances.isEmpty();
-            if (isBucketEmpty
-                    || appliedEsperancesFromBucket == null
-                    || Double.compare(bestGainOfOtherEsperances, bucketBestGainEsperances.get(0).gain) > 0) {
-                if (isBucketEmpty) {
-                    System.out.println("Recomputing bucket because empty");
-                } else if (appliedEsperancesFromBucket == null) {
-                    System.out.println("Recomputing bucket because nothing applied from current bucket");
-                    bucketSize *= 2;
-                    System.out.println("Increasing size to " + bucketSize);
-                } else {
-                    System.out.println("Recomputing bucket because better gain in other " +
-                            bucketBestGainEsperances.get(0).gain + " < " + bestGainOfOtherEsperances);
-                }
+            currentBestBucket = recomputeBestBucket(currentBestBucket, buckets);
 
-                System.out.println("Removing useless esperances for all " + System.currentTimeMillis());
-                removeUselessEsperances(allGainEsperances, true);
-                System.out.println("Recomputing gain for all " + System.currentTimeMillis());
-                recomputeGainEsperancesGain(allGainEsperances, numberOfRequestInTotal);
-                System.out.println("Ordering for all " + System.currentTimeMillis());
-                orderByMostGain(allGainEsperances);
+            appliedEsperancesFromBucket = applyingFirstEsperance(currentBestBucket);
 
-                bucketSize = Math.min(bucketSize, allGainEsperances.size());
-                bucketBestGainEsperances = allGainEsperances.subList(0, bucketSize);
-                bestGainOfOtherEsperances = bucketSize == allGainEsperances.size()
-                        ? 0 : allGainEsperances.get(bucketSize).gain;
+            removeUselessEsperances(currentBestBucket, true);
+            recomputeGainEsperancesGain(currentBestBucket);
+            orderByMostGain(currentBestBucket);
 
-                System.out.println("New best esperances in other " + bestGainOfOtherEsperances);
-            }
-
-            appliedEsperancesFromBucket = applyingFirstEsperance(bucketBestGainEsperances);
-
-            removeUselessEsperances(bucketBestGainEsperances, true);
-            recomputeGainEsperancesGain(bucketBestGainEsperances, numberOfRequestInTotal);
-            orderByMostGain(bucketBestGainEsperances);
-
-            if (appliedEsperances % 30 == 0) {
+            if (appliedEsperances % 40 == 0) {
+                int numberOfEsperanceInTotal = buckets.stream().mapToInt(List::size).sum();
                 System.out.println("Applied esperances " + appliedEsperances +
-                        " still " + bucketBestGainEsperances.size() + " gain esperances in bucket and " +
-                        allGainEsperances.size() + " esperances in total");
+                        " still " + currentBestBucket.size() + " gain esperances in current buckets for " +
+                        numberOfEsperanceInTotal  + " esperances in total");
                 printCacheCapacities(problem);
             }
             appliedEsperances++;
-        } while (appliedEsperancesFromBucket != null || bucketBestGainEsperances.size() != allGainEsperances.size());
+        } while (appliedEsperancesFromBucket != null || !buckets.isEmpty());
 
         printCacheCapacities(problem);
 
@@ -152,6 +133,39 @@ public class Qualification {
         System.out.println("New score: " + score);
 
         write_solution(out, problem.caches);
+    }
+
+    private static List<GainEsperance> recomputeBestBucket(List<GainEsperance> currentBestBucket, List<List<GainEsperance>> buckets) {
+        while (shouldRecomputeBestBucket(currentBestBucket, buckets)) {
+            System.out.println("Recompute best bucket: current " + currentBestBucket.size());
+            List<GainEsperance> nextBestBucket = buckets.remove(0);
+
+            ArrayList<GainEsperance> mergedBuckets = new ArrayList<>(currentBestBucket);
+            mergedBuckets.addAll(nextBestBucket);
+
+            removeUselessEsperances(mergedBuckets, true);
+            recomputeGainEsperancesGain(mergedBuckets);
+            orderByMostGain(mergedBuckets);
+
+            currentBestBucket = mergedBuckets;
+            double bestGain = currentBestBucket.isEmpty() ? 0 : currentBestBucket.get(0).gain;
+            System.out.println("New best bucket " + currentBestBucket.size() + " with best gain " + bestGain);
+        }
+        return currentBestBucket;
+    }
+
+    private static boolean shouldRecomputeBestBucket(List<GainEsperance> currentBestBucket, List<List<GainEsperance>> buckets) {
+        if (buckets.isEmpty()) {
+            return false;
+        }
+
+        if (currentBestBucket.isEmpty()) {
+            return true;
+        }
+
+        List<GainEsperance> nextBestBucket = buckets.get(0);
+        double nextBucketBestGain = nextBestBucket.isEmpty() ? 0 : nextBestBucket.get(0).gain;
+        return Double.compare(currentBestBucket.get(0).gain, nextBucketBestGain) < 0;
     }
 
     private static List<RequestFromEndPointToCache> createRequestFromEndPointToCaches(String in, Problem problem, List<Request> subListRequests) {
@@ -286,7 +300,7 @@ public class Qualification {
         return totalNumberOfRequestLeft;
     }
 
-    private static void recomputeGainEsperancesGain(List<GainEsperance> gainEsperances, double numberOfRequestInTotal) {
+    private static void recomputeGainEsperancesGain(List<GainEsperance> gainEsperances) {
         gainEsperances.parallelStream()
                 .forEach(gainEsperance -> {
                     gainEsperance.gain = 0;
