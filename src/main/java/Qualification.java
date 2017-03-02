@@ -2,7 +2,6 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.ToIntFunction;
 import java.util.stream.Collectors;
 
 /**
@@ -24,7 +23,8 @@ public class Qualification {
     private static final String WORTH_SPREADING_IN = "files/qualification_2017/videos_worth_spreading.in";
     private static final String WORTH_SPREADING_OUT = "files/qualification_2017/videos_worth_spreading.out";
 
-    private static final int BUCKET_SIZE = 2_000;
+    private static final int BUCKET_INITIAL_SIZE = 5_000;
+    private static final int BUCKET_MAX_SIZE = 20_000;
     private static final int MAX_GAIN_ESPERANCES_SIZE = 1_500_000;
 
 
@@ -84,7 +84,7 @@ public class Qualification {
 
         List<RequestFromEndPointToCache> allRequestsFromEndPointToCache =
                 createRequestFromEndPointToCaches(in, problem, problem.requests);
-        List<GainEsperance> allGainEsperances = createGainEsperances(allRequestsFromEndPointToCache);
+        List<GainEsperance> allGainEsperances = createGainEsperancesInParallel(allRequestsFromEndPointToCache);
         recomputeGainEsperancesGain(allGainEsperances);
         orderByMostGain(allGainEsperances);
 
@@ -94,15 +94,8 @@ public class Qualification {
             allGainEsperances = allGainEsperances.subList(0, MAX_GAIN_ESPERANCES_SIZE);
         }
 
-        int numberOfGainEsperances = allGainEsperances.size();
-        int numberOfBuckets = 1 + numberOfGainEsperances / BUCKET_SIZE;
-        List<List<GainEsperance>> buckets = new ArrayList<>(numberOfBuckets);
-        for (int i = 0; i < numberOfBuckets; i++) {
-            int startIndex = i * BUCKET_SIZE;
-            int stopIndex = Math.min(numberOfGainEsperances, startIndex + BUCKET_SIZE);
-            buckets.add(new ArrayList<>(allGainEsperances.subList(startIndex, stopIndex)));
-        }
-
+        List<List<GainEsperance>> buckets = new ArrayList<>();
+        fillBuckets(allGainEsperances, buckets);
 
         GainEsperance appliedEsperancesFromBucket = null;
         int appliedEsperances = 0;
@@ -114,14 +107,14 @@ public class Qualification {
             appliedEsperancesFromBucket = applyingFirstEsperance(currentBestBucket);
 
             removeUselessEsperances(currentBestBucket, true);
-            recomputeGainEsperancesGain(currentBestBucket);
+            // recomputeGainEsperancesGain(currentBestBucket);
             orderByMostGain(currentBestBucket);
 
             if (appliedEsperances % 40 == 0) {
                 int numberOfEsperanceInTotal = buckets.stream().mapToInt(List::size).sum();
                 System.out.println("Applied esperances " + appliedEsperances +
                         " still " + currentBestBucket.size() + " gain esperances in current buckets for " +
-                        numberOfEsperanceInTotal  + " esperances in total");
+                        numberOfEsperanceInTotal + " esperances in total");
                 printCacheCapacities(problem);
             }
             appliedEsperances++;
@@ -130,27 +123,57 @@ public class Qualification {
         printCacheCapacities(problem);
 
         long score = computeScore(problem.requests);
-        System.out.println("New score: " + score);
+        System.out.println("New score: " + score + " for " + appliedEsperances + " applied esperances");
 
         write_solution(out, problem.caches);
     }
 
+    private static void fillBuckets(List<GainEsperance> esperances, List<List<GainEsperance>> buckets) {
+        int numberOfGainEsperances = esperances.size();
+        int numberOfBuckets = 1 + numberOfGainEsperances / BUCKET_INITIAL_SIZE;
+        for (int i = 0; i < numberOfBuckets; i++) {
+            int startIndex = i * BUCKET_INITIAL_SIZE;
+            int stopIndex = Math.min(numberOfGainEsperances, startIndex + BUCKET_INITIAL_SIZE);
+            buckets.add(new ArrayList<>(esperances.subList(startIndex, stopIndex)));
+        }
+    }
+
     private static List<GainEsperance> recomputeBestBucket(List<GainEsperance> currentBestBucket, List<List<GainEsperance>> buckets) {
+        boolean changed = false;
         while (shouldRecomputeBestBucket(currentBestBucket, buckets)) {
-            System.out.println("Recompute best bucket: current " + currentBestBucket.size());
             List<GainEsperance> nextBestBucket = buckets.remove(0);
 
             ArrayList<GainEsperance> mergedBuckets = new ArrayList<>(currentBestBucket);
             mergedBuckets.addAll(nextBestBucket);
 
             removeUselessEsperances(mergedBuckets, true);
-            recomputeGainEsperancesGain(mergedBuckets);
+            // recomputeGainEsperancesGain(mergedBuckets);
             orderByMostGain(mergedBuckets);
 
             currentBestBucket = mergedBuckets;
+            changed = true;
+        }
+
+        if (changed && currentBestBucket.size() > BUCKET_MAX_SIZE) {
+            System.out.println("Too big buckets: " + currentBestBucket.size() + " recomputing all buckets");
+            List<GainEsperance> gainEsperances = buckets.stream().flatMap(List::stream).collect(Collectors.toList());
+
+            gainEsperances.addAll(currentBestBucket);
+            removeUselessEsperances(gainEsperances, true);
+            // recomputeGainEsperancesGain(gainEsperances);
+            orderByMostGain(gainEsperances);
+
+            buckets.clear();
+            fillBuckets(gainEsperances, buckets);
+            currentBestBucket = buckets.remove(0);
+            String toto = "toto";
+        }
+
+        if (changed) {
             double bestGain = currentBestBucket.isEmpty() ? 0 : currentBestBucket.get(0).gain;
             System.out.println("New best bucket " + currentBestBucket.size() + " with best gain " + bestGain);
         }
+
         return currentBestBucket;
     }
 
@@ -181,11 +204,6 @@ public class Qualification {
             }
         });
 
-        /*if (KITTEN_IN.equals(in)) {
-            allRequestsFromEndPointToCache.sort((o1, o2) -> o2.number - o1.number);
-            System.out.println("Ouch that's a lot of request from endpoint to cache: " + allRequestsFromEndPointToCache.size());
-            allRequestsFromEndPointToCache = allRequestsFromEndPointToCache.subList(0, Math.min(40_000_000, allRequestsFromEndPointToCache.size()));
-        }*/
         return allRequestsFromEndPointToCache;
     }
 
@@ -222,6 +240,7 @@ public class Qualification {
                             }
 
                             if (isAlreadySatisfied) {
+                                gainEsperance.gain -= candidateRequest.gain;
                                 associatedRequests.remove(requestIndex);
                             }
                         }
@@ -305,8 +324,7 @@ public class Qualification {
                 .forEach(gainEsperance -> {
                     gainEsperance.gain = 0;
                     for (RequestFromEndPointToCache request : gainEsperance.associatedRequests) {
-                        float timeSaved = request.number * (float) (request.endPoint.latencyFromDataCenter - request.latencyValue);
-                        gainEsperance.gain += timeSaved / request.video.size;
+                        gainEsperance.gain += request.gain;
                     }
                 });
     }
@@ -328,6 +346,41 @@ public class Qualification {
 
         System.out.println(gainEsperances.size() + " gain esperances created");
         return new ArrayList<>(gainEsperances);
+    }
+
+
+    private static List<GainEsperance> createGainEsperancesInParallel(List<RequestFromEndPointToCache> allRequests) {
+        int numberOfRequests = allRequests.size();
+        System.out.println("creating GainEsperances for " + numberOfRequests + " requests");
+
+        List<GainEsperance> gainEsperances = allRequests.stream()
+                .collect(Collectors.groupingBy(request -> request.cache))
+                .entrySet()
+                .parallelStream()
+                .map(cacheListEntry -> {
+                    final Cache cache = cacheListEntry.getKey();
+                    List<RequestFromEndPointToCache> requests = cacheListEntry.getValue();
+                    System.out.println("creating GainEsperances for cache " + cache.id + " and " + requests.size() + " requests");
+
+                    Map<Video, List<RequestFromEndPointToCache>> requestGroupByVideo = requests.stream()
+                            .collect(Collectors.groupingBy(request -> request.video));
+
+                    int numberOfVideos = requestGroupByVideo.size();
+                    List<GainEsperance> gainEsperancesForCache = new ArrayList<>(numberOfVideos);
+
+                    requestGroupByVideo.forEach((video, requestFromEndPointToCaches) -> {
+                        GainEsperance gainEsperance = new GainEsperance(video, cache);
+                        gainEsperance.associatedRequests.addAll(requestFromEndPointToCaches);
+                        gainEsperancesForCache.add(gainEsperance);
+                    });
+
+                    return gainEsperancesForCache;
+                })
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+
+        System.out.println(gainEsperances.size() + " gain esperances created");
+        return gainEsperances;
     }
 
 
@@ -710,6 +763,7 @@ public class Qualification {
         public final Cache cache;
         public final int number;
         public final int latencyValue;
+        public final double gain;
 
         public RequestFromEndPointToCache(Video video, EndPoint endPoint, Cache cache, int number, int latencyValue) {
             this.video = video;
@@ -717,6 +771,8 @@ public class Qualification {
             this.cache = cache;
             this.number = number;
             this.latencyValue = latencyValue;
+            double timeSaved = number * (double) (endPoint.latencyFromDataCenter - latencyValue);
+            this.gain = timeSaved / video.size;
         }
     }
 
