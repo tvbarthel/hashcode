@@ -107,7 +107,6 @@ public class Qualification {
             appliedEsperancesFromBucket = applyingFirstEsperance(currentBestBucket);
 
             removeUselessEsperances(currentBestBucket, true);
-            // recomputeGainEsperancesGain(currentBestBucket);
             orderByMostGain(currentBestBucket);
 
             if (appliedEsperances % 40 == 0) {
@@ -147,7 +146,6 @@ public class Qualification {
             mergedBuckets.addAll(nextBestBucket);
 
             removeUselessEsperances(mergedBuckets, true);
-            // recomputeGainEsperancesGain(mergedBuckets);
             orderByMostGain(mergedBuckets);
 
             currentBestBucket = mergedBuckets;
@@ -160,13 +158,11 @@ public class Qualification {
 
             gainEsperances.addAll(currentBestBucket);
             removeUselessEsperances(gainEsperances, true);
-            // recomputeGainEsperancesGain(gainEsperances);
             orderByMostGain(gainEsperances);
 
             buckets.clear();
             fillBuckets(gainEsperances, buckets);
             currentBestBucket = buckets.remove(0);
-            String toto = "toto";
         }
 
         if (changed) {
